@@ -1,0 +1,9 @@
+services:
+  lemusic:
+    build: .
+    image: lemusic:dev
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/data
+    stop_grace_period: 15s
