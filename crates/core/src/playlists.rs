@@ -7,7 +7,7 @@ use sqlx::Row;
 use crate::{Db, TrackMeta};
 
 pub const MAX_NAME_LEN: usize = 64;
-pub const MAX_TRACKS: usize = 500;
+pub const MAX_TRACKS: usize = 1000;
 
 #[derive(Debug, Clone, Serialize)]
 pub struct PlaylistInfo {

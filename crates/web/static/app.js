@@ -367,6 +367,22 @@ async function loadPlaylists() {
   }
 }
 
+$("#playlist-create").addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const form = ev.target;
+  const btn = $("button[type=submit]", form);
+  const { name, query, soundcloud } = formData(form);
+  btn.textContent = "Lade Titel …";
+  const r = await run(btn, () => api("POST", `/playlists/${encodeURIComponent(name.trim())}/add`, { query, soundcloud }),
+    (r) => `${r.added} Titel hinzugefügt – Playlist hat jetzt ${r.total}`);
+  btn.textContent = "Anlegen / importieren";
+  if (r) {
+    form.reset();
+    await loadPlaylists();
+    showPlaylist(name.trim());
+  }
+});
+
 $("#playlist-list").addEventListener("click", (ev) => {
   const li = ev.target.closest("li[data-name]");
   if (li) showPlaylist(li.dataset.name);

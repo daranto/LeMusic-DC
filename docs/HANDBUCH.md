@@ -70,7 +70,7 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 ## Weboberfläche
 
 - **Wiedergabe:** Live-Status, Cover, Fortschritt, Steuerung, Lautstärke, Spulen, Warteschlange sortieren, direkt in einen Sprachkanal abspielen
-- **Playlists:** anlegen (aus der Warteschlange), bearbeiten, abspielen
+- **Playlists:** direkt aus einem YouTube-/SoundCloud-Link anlegen oder aus der Warteschlange speichern (bis 1000 Titel), bearbeiten, abspielen
 - **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein; DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, Ansagen
 - **System:** yt-dlp aktualisieren, Selbsttest, YouTube-Cookies
 - **Logs** live, **Konto** (Passwort ändern)

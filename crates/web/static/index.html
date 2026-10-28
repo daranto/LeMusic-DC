@@ -95,9 +95,19 @@
       <!-- Playlists -->
       <section id="tab-playlists" class="tab" hidden>
         <div class="grid-sidebar">
-          <div class="card">
-            <h2>Playlists</h2>
-            <ul class="list" id="playlist-list"></ul>
+          <div class="sidebar-stack">
+            <form class="card" id="playlist-create">
+              <h2>Neue Playlist</h2>
+              <label>Name<input name="name" maxlength="64" required placeholder="z. B. Party"></label>
+              <label>Link oder Suche<input name="query" required placeholder="YouTube-/SoundCloud-Playlist oder Titel"></label>
+              <label class="check"><input type="checkbox" name="soundcloud"> Suche auf SoundCloud</label>
+              <button class="btn primary" type="submit">Anlegen / importieren</button>
+              <p class="muted small-note">Existiert der Name schon, werden die Titel angehängt. Bis zu 1000 Titel.</p>
+            </form>
+            <div class="card">
+              <h2>Playlists</h2>
+              <ul class="list" id="playlist-list"></ul>
+            </div>
           </div>
           <div class="card" id="playlist-detail">
             <p class="muted">Playlist auswählen oder mit „Als Playlist speichern“ aus der Warteschlange anlegen.</p>

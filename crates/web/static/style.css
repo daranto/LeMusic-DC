@@ -75,6 +75,8 @@ h2 { font-size: 1.05rem; margin: 0 0 12px; }
 form.card { display: flex; flex-direction: column; gap: 12px; }
 
 .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.sidebar-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.small-note { font-size: .82rem; margin: 0; }
 .grid-sidebar { display: grid; grid-template-columns: minmax(220px, 300px) 1fr; gap: 16px; }
 @media (max-width: 760px) {
   .grid-2, .grid-sidebar { grid-template-columns: 1fr; }

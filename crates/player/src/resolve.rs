@@ -12,9 +12,9 @@ use serde::Deserialize;
 use tokio::process::Command;
 
 /// Maximale Laufzeit eines yt-dlp-Aufrufs.
-const RESOLVE_TIMEOUT: Duration = Duration::from_secs(30);
-/// Obergrenze für Playlists, damit niemand 5000 Tracks einreiht.
-pub const MAX_PLAYLIST_TRACKS: usize = 200;
+const RESOLVE_TIMEOUT: Duration = Duration::from_secs(60);
+/// Obergrenze für Playlists (1000 Einträge lädt yt-dlp in ~8 s).
+pub const MAX_PLAYLIST_TRACKS: usize = 1000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SearchSource {
