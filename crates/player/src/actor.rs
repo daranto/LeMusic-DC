@@ -497,12 +497,21 @@ impl Actor {
             None => None,
         };
 
-        let handle = match prepared {
-            Some(handle) => {
-                let _ = handle.set_volume(self.volume_factor());
-                handle.play()?;
-                handle
+        // Ist der vorbereitete Track inzwischen gescheitert (Handle schon
+        // beendet), wird er frisch gebaut – sonst würde ein womöglich nur
+        // kurz gestörter Track übersprungen.
+        let prepared = prepared.and_then(|handle| {
+            let _ = handle.set_volume(self.volume_factor());
+            match handle.play() {
+                Ok(()) => Some(handle),
+                Err(e) => {
+                    debug!(error = %e, "Vorbereiteter Track unbrauchbar – baue neu");
+                    None
+                }
             }
+        });
+        let handle = match prepared {
+            Some(handle) => handle,
             None => {
                 let track =
                     build_track(entry.meta.clone(), self.volume_factor(), start_at, retries);
@@ -889,6 +898,17 @@ impl Actor {
             .as_ref()
             .is_some_and(|c| c.ready && !self.paused && c.last_progress.elapsed() > STALL_TIMEOUT);
         if stalled {
+            // Zustand für die Ursachenforschung festhalten.
+            if let Some(current) = &self.current {
+                let info = current.handle.get_info().await;
+                warn!(
+                    title = %current.entry.meta.title,
+                    position = %lemusic_core::format_duration(current.position),
+                    state = ?info.as_ref().map(|i| (&i.playing, &i.ready, i.play_time)),
+                    connected = self.call.is_some(),
+                    "Position bewegt sich seit 20 s nicht"
+                );
+            }
             self.handle_failure("Stream hängt".into()).await;
         }
     }
