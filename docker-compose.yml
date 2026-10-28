@@ -1,13 +1,24 @@
 services:
   lemusic:
     build: .
-    image: lemusic:dev
+    image: lemusic:latest
+    container_name: lemusic
     restart: unless-stopped
     env_file: .env
     ports:
       # Weboberfläche – nur lokal erreichbar. Für Zugriff aus dem LAN
-      # „127.0.0.1:“ entfernen.
+      # „127.0.0.1:“ entfernen (dann am besten hinter einen HTTPS-Proxy).
       - "127.0.0.1:8080:8080"
     volumes:
+      # Datenbank, yt-dlp-Cache, optionale cookies.txt
       - ./data:/data
+    # Zeit für sauberes Herunterfahren (Zustand sichern, Kanal verlassen).
     stop_grace_period: 15s
+    # Schutz vor Ausreißern; normal braucht der Bot ~100–300 MB.
+    mem_limit: 1g
+    # Container-Logs rotieren, damit sie nie die Platte füllen.
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
