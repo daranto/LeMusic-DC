@@ -118,7 +118,7 @@ Ein Track wird erst unmittelbar vor dem Abspielen gestartet (lazy, mit 5 s Vorla
 | 1 | **Grundgerüst:** Workspace, Konfiguration, SQLite, Logging, Health | ✅ | Bot startet, Health ist grün |
 | 2 | **Player-Kern:** Actor, Supervisor, Persistenz, Wiederverbindung, Watchdog | ✅ | Läuft trotz Netzwerkabbruch und Neustart weiter |
 | 3 | **Befehle:** alle Befehle, DJ-Rechte, Voteskip, Seek, Playlists, Inaktivität | ✅ | Alle Funktionen sind vorhanden |
-| 4 | **Weboberfläche:** Login, Einstellungen, Live-Dashboard, Logs | | Alles ist im Browser einstellbar |
+| 4 | **Weboberfläche:** Login, Einstellungen, Live-Dashboard, Logs | ✅ | Alles ist im Browser einstellbar |
 | 5 | **Docker-Feinschliff:** Healthcheck, README, Image-Größe | | Ein `docker compose up -d` reicht |
 | 6 | **Härtung:** Chaos-Tests, 24-Stunden-Dauerlauf mit Playlist, Speicherverbrauch prüfen | | Läuft 24 h ohne Eingriff |
 

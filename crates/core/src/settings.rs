@@ -23,6 +23,8 @@ pub struct BotSettings {
     pub default_volume: u16,
     /// Nach so vielen Sekunden ohne Wiedergabe verlässt der Bot den Kanal.
     pub idle_timeout_secs: u64,
+    /// Automatisch pausieren, wenn niemand mehr im Sprachkanal ist.
+    pub pause_when_alone: bool,
 }
 
 impl Default for BotSettings {
@@ -31,6 +33,7 @@ impl Default for BotSettings {
             status_text: "/play".into(),
             default_volume: 100,
             idle_timeout_secs: 300,
+            pause_when_alone: true,
         }
     }
 }

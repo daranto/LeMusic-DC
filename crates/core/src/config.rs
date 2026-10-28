@@ -62,9 +62,7 @@ impl EnvConfig {
             guild_id: required("GUILD_ID")?
                 .parse()
                 .context("GUILD_ID ist keine gültige Zahl")?,
-            data_dir: env::var("DATA_DIR")
-                .map(PathBuf::from)
-                .unwrap_or_else(|_| PathBuf::from("/data")),
+            data_dir: data_dir(),
             web_bind: web_bind_from_env()?,
         })
     }
@@ -72,6 +70,18 @@ impl EnvConfig {
     pub fn database_path(&self) -> PathBuf {
         self.data_dir.join("lemusic.db")
     }
+}
+
+/// Datenverzeichnis (`DATA_DIR`, Standard `/data`).
+pub fn data_dir() -> PathBuf {
+    env::var("DATA_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|_| PathBuf::from("/data"))
+}
+
+/// Optionale YouTube-Cookies für yt-dlp (Netscape-Format).
+pub fn cookies_path() -> PathBuf {
+    data_dir().join("cookies.txt")
 }
 
 /// `WEB_BIND`, z. B. `0.0.0.0:8080`. Auch vom Healthcheck genutzt.

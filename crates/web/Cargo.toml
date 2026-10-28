@@ -9,8 +9,10 @@ workspace = true
 
 [dependencies]
 lemusic-core.workspace = true
+lemusic-player.workspace = true
 anyhow.workspace = true
 axum.workspace = true
+fastrand.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

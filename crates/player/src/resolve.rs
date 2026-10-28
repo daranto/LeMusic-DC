@@ -114,17 +114,17 @@ pub async fn search(query: &str, source: SearchSource, limit: usize) -> Result<V
 
 async fn run_ytdlp(target: &str) -> Result<Vec<TrackMeta>> {
     let mut cmd = Command::new("yt-dlp");
-    cmd.args([
-        "--dump-single-json",
-        "--flat-playlist",
-        "--no-warnings",
-        "--playlist-end",
-        &MAX_PLAYLIST_TRACKS.to_string(),
-        "--",
-        target,
-    ])
-    .stdin(Stdio::null())
-    .kill_on_drop(true);
+    cmd.args(crate::ytdlp_base_args())
+        .args([
+            "--dump-single-json",
+            "--flat-playlist",
+            "--playlist-end",
+            &MAX_PLAYLIST_TRACKS.to_string(),
+            "--",
+            target,
+        ])
+        .stdin(Stdio::null())
+        .kill_on_drop(true);
 
     let output = tokio::time::timeout(RESOLVE_TIMEOUT, cmd.output())
         .await

@@ -65,9 +65,9 @@ impl YtDlpSource {
 
     fn spawn(&self) -> io::Result<(ChildStdout, ChildGuard)> {
         let mut ytdlp = Command::new("yt-dlp")
+            .args(crate::ytdlp_base_args())
             .args([
                 "--quiet",
-                "--no-warnings",
                 "--no-playlist",
                 "--no-part",
                 "-f",

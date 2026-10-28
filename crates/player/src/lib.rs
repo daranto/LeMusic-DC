@@ -4,6 +4,7 @@ mod actor;
 mod manager;
 pub mod model;
 pub mod resolve;
+pub mod selftest;
 pub mod source;
 
 use std::{sync::Arc, time::Duration};
@@ -18,6 +19,17 @@ pub use model::{
 };
 pub use resolve::{MAX_PLAYLIST_TRACKS, SearchSource, is_url, resolve, search};
 pub use source::YtDlpSource;
+
+/// Gemeinsame yt-dlp-Argumente (z. B. Cookies, falls hinterlegt).
+pub(crate) fn ytdlp_base_args() -> Vec<String> {
+    let mut args = vec!["--no-warnings".to_string()];
+    let cookies = lemusic_core::config::cookies_path();
+    if cookies.is_file() {
+        args.push("--cookies".into());
+        args.push(cookies.display().to_string());
+    }
+    args
+}
 
 /// Baut einen (lazy) Track ab Position `start_at`.
 pub fn build_track(meta: Arc<TrackMeta>, volume: f32, start_at: Duration) -> Track {

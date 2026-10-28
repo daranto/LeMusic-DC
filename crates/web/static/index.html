@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <title>LeMusic</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Cpath d='M13 22a3 3 0 1 1-2-2.83V9l10-2v11a3 3 0 1 1-2-2.83V10.5l-6 1.2V22z' fill='white'/%3E%3C/svg%3E">
+</head>
+<body>
+  <!-- Login -->
+  <main id="login-view" class="login" hidden>
+    <form id="login-form" class="card login-card" autocomplete="on">
+      <div class="brand brand-lg"><span class="logo">♪</span> LeMusic</div>
+      <p class="muted">Anmelden, um den Bot zu verwalten.</p>
+      <label>Benutzername<input name="username" autocomplete="username" required></label>
+      <label>Passwort<input name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn primary" type="submit">Anmelden</button>
+      <p id="login-error" class="error" role="alert"></p>
+    </form>
+  </main>
+
+  <!-- App -->
+  <div id="app-view" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="logo">♪</span> LeMusic</div>
+      <nav class="tabs" role="tablist">
+        <button data-tab="dashboard" class="active">Wiedergabe</button>
+        <button data-tab="playlists">Playlists</button>
+        <button data-tab="settings">Einstellungen</button>
+        <button data-tab="system">System</button>
+        <button data-tab="logs">Logs</button>
+        <button data-tab="account">Konto</button>
+      </nav>
+      <button id="logout" class="btn ghost small">Abmelden</button>
+    </header>
+
+    <div class="content">
+      <!-- Wiedergabe -->
+      <section id="tab-dashboard" class="tab">
+        <div class="status-row" id="status-row"></div>
+
+        <div class="grid-2">
+          <div class="card now">
+            <div class="now-cover" id="now-cover"></div>
+            <div class="now-body">
+              <div class="eyebrow" id="now-state">Nichts läuft</div>
+              <a class="now-title" id="now-title" target="_blank" rel="noopener"></a>
+              <div class="muted" id="now-author"></div>
+              <div class="progress"><div class="progress-fill" id="now-progress"></div></div>
+              <div class="progress-times"><span id="now-pos">0:00</span><span id="now-len">0:00</span></div>
+              <div class="controls">
+                <button class="btn icon" id="btn-playpause" title="Pause/Weiter">⏯</button>
+                <button class="btn icon" id="btn-skip" title="Überspringen">⏭</button>
+                <button class="btn icon" id="btn-stop" title="Stoppen &amp; verlassen">⏹</button>
+                <button class="btn icon" id="btn-shuffle" title="Mischen">🔀</button>
+                <button class="btn small" id="btn-repeat" title="Wiederholen">🔁 aus</button>
+                <form id="seek-form" class="seek">
+                  <input name="position" placeholder="1:30" aria-label="Spulen zu">
+                  <button class="btn small" type="submit">Spulen</button>
+                </form>
+              </div>
+              <label class="volume">🔊 <input type="range" id="volume" min="0" max="200" step="5"> <span id="volume-label">100 %</span></label>
+            </div>
+          </div>
+
+          <form class="card" id="play-form">
+            <h2>Hinzufügen</h2>
+            <label>Link oder Suche<input name="query" placeholder="YouTube-/SoundCloud-Link oder Suchbegriff" required></label>
+            <label>Sprachkanal<select name="voice_channel" id="voice-select"></select></label>
+            <div class="row">
+              <label class="check"><input type="checkbox" name="soundcloud"> Auf SoundCloud suchen</label>
+              <label class="check"><input type="checkbox" name="next"> Als Nächstes</label>
+            </div>
+            <button class="btn primary" type="submit">Abspielen</button>
+          </form>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Warteschlange <span class="muted" id="queue-meta"></span></h2>
+            <div class="row">
+              <button class="btn small" id="btn-save-queue">Als Playlist speichern</button>
+              <button class="btn small danger" id="btn-clear">Leeren</button>
+            </div>
+          </div>
+          <ol class="queue" id="queue"></ol>
+        </div>
+      </section>
+
+      <!-- Playlists -->
+      <section id="tab-playlists" class="tab" hidden>
+        <div class="grid-sidebar">
+          <div class="card">
+            <h2>Playlists</h2>
+            <ul class="list" id="playlist-list"></ul>
+          </div>
+          <div class="card" id="playlist-detail">
+            <p class="muted">Playlist auswählen oder mit „Als Playlist speichern“ aus der Warteschlange anlegen.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Einstellungen -->
+      <section id="tab-settings" class="tab" hidden>
+        <div class="grid-2">
+          <form class="card" id="bot-settings">
+            <h2>Bot</h2>
+            <label>Status-Text<input name="status_text" maxlength="128" placeholder="/play"></label>
+            <label>Standard-Lautstärke (%)<input name="default_volume" type="number" min="0" max="200" required></label>
+            <label>Kanal verlassen nach Inaktivität (Sekunden, 0 = nie)<input name="idle_timeout_secs" type="number" min="0" required></label>
+            <label class="check"><input type="checkbox" name="pause_when_alone"> Pausieren, wenn niemand zuhört</label>
+            <button class="btn primary" type="submit">Speichern</button>
+          </form>
+
+          <form class="card" id="guild-settings">
+            <h2>Server</h2>
+            <label>DJ-Rolle<select name="dj_role"></select></label>
+            <label>Nur in Textkanal<select name="text_channel"></select></label>
+            <label>Nur in Sprachkanal<select name="voice_channel"></select></label>
+            <label>Vote-Skip-Quote (%)<input name="skip_ratio" type="number" min="0" max="100" required></label>
+            <label>Maximale Track-Länge (Minuten, 0 = unbegrenzt)<input name="max_track_mins" type="number" min="0" required></label>
+            <label>Autoplaylist (läuft bei leerer Warteschlange)<select name="autoplaylist"></select></label>
+            <label class="check"><input type="checkbox" name="announce_tracks"> „Spiele jetzt“ im Textkanal ankündigen</label>
+            <button class="btn primary" type="submit">Speichern</button>
+          </form>
+        </div>
+      </section>
+
+      <!-- System -->
+      <section id="tab-system" class="tab" hidden>
+        <div class="grid-2">
+          <div class="card">
+            <h2>yt-dlp</h2>
+            <p>Version: <strong id="ytdlp-version">…</strong></p>
+            <p class="muted">Wird bei jedem Containerstart automatisch aktualisiert. Bei YouTube-Problemen hier sofort aktualisieren.</p>
+            <button class="btn primary" id="btn-ytdlp-update">Jetzt aktualisieren</button>
+          </div>
+
+          <form class="card" id="selftest-form">
+            <h2>Selbsttest</h2>
+            <p class="muted">Lädt einen Track und liest 10 Sekunden im Echtzeit-Takt – ohne Discord.</p>
+            <label>Link oder Suche<input name="query" value="never gonna give you up" required></label>
+            <label class="check"><input type="checkbox" name="soundcloud"> SoundCloud</label>
+            <button class="btn primary" type="submit">Test starten</button>
+            <pre class="result" id="selftest-result" hidden></pre>
+          </form>
+
+          <div class="card">
+            <h2>YouTube-Cookies <span class="badge" id="cookies-badge"></span></h2>
+            <p class="muted">Nur nötig, wenn YouTube den Server blockiert („Sign in to confirm you're not a bot“). Export einer <code>cookies.txt</code> (Netscape-Format) eines Zweit-Accounts.</p>
+            <div class="row">
+              <input type="file" id="cookies-file" accept=".txt,text/plain">
+              <button class="btn primary small" id="btn-cookies-upload">Hochladen</button>
+              <button class="btn danger small" id="btn-cookies-delete">Entfernen</button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Logs -->
+      <section id="tab-logs" class="tab" hidden>
+        <div class="card">
+          <div class="card-head">
+            <h2>Logs</h2>
+            <label class="check">Level
+              <select id="log-level">
+                <option value="TRACE">alle</option>
+                <option value="INFO" selected>Info+</option>
+                <option value="WARN">Warnungen+</option>
+                <option value="ERROR">Fehler</option>
+              </select>
+            </label>
+          </div>
+          <div class="logs" id="logs"></div>
+        </div>
+      </section>
+
+      <!-- Konto -->
+      <section id="tab-account" class="tab" hidden>
+        <form class="card narrow" id="password-form">
+          <h2>Passwort ändern</h2>
+          <p class="muted">Angemeldet als <strong id="username"></strong>. Andere Sitzungen werden dabei abgemeldet.</p>
+          <label>Aktuelles Passwort<input name="current" type="password" autocomplete="current-password" required></label>
+          <label>Neues Passwort (mind. 8 Zeichen)<input name="new" type="password" autocomplete="new-password" minlength="8" required></label>
+          <button class="btn primary" type="submit">Ändern</button>
+        </form>
+      </section>
+    </div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <script src="/app.js"></script>
+</body>
+</html>

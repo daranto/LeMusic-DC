@@ -2,6 +2,7 @@
 
 use std::sync::{Arc, OnceLock};
 
+use lemusic_core::{GuildDirectory, GuildInfo, NamedId};
 use lemusic_player::VoicePresence;
 use poise::serenity_prelude as serenity;
 
@@ -51,5 +52,67 @@ impl VoicePresence for CachePresence {
             serenity::GuildId::new(guild_id),
             serenity::ChannelId::new(channel_id),
         )
+    }
+}
+
+impl GuildDirectory for CachePresence {
+    fn guild_info(&self, guild_id: u64) -> Option<GuildInfo> {
+        let cache = self.cache.get()?;
+        let bot_name = cache.current_user().name.clone();
+        let guild = cache.guild(serenity::GuildId::new(guild_id))?;
+
+        let mut channels: Vec<_> = guild.channels.values().collect();
+        channels.sort_by_key(|c| (c.position, c.id));
+        let named = |c: &&serenity::GuildChannel| NamedId {
+            id: c.id.to_string(),
+            name: c.name.clone(),
+        };
+        let voice_channels = channels
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.kind,
+                    serenity::ChannelType::Voice | serenity::ChannelType::Stage
+                )
+            })
+            .map(named)
+            .collect();
+        let text_channels = channels
+            .iter()
+            .filter(|c| {
+                matches!(
+                    c.kind,
+                    serenity::ChannelType::Text | serenity::ChannelType::News
+                )
+            })
+            .map(named)
+            .collect();
+
+        let mut roles: Vec<_> = guild
+            .roles
+            .values()
+            .filter(|r| r.id.get() != guild_id && !r.managed)
+            .collect();
+        roles.sort_by_key(|r| std::cmp::Reverse(r.position));
+        let roles = roles
+            .into_iter()
+            .map(|r| NamedId {
+                id: r.id.to_string(),
+                name: r.name.clone(),
+            })
+            .collect();
+
+        Some(GuildInfo {
+            id: guild_id.to_string(),
+            name: guild.name.clone(),
+            bot_name,
+            voice_channels,
+            text_channels,
+            roles,
+        })
+    }
+
+    fn listeners(&self, guild_id: u64, channel_id: u64) -> Option<usize> {
+        VoicePresence::listeners(self, guild_id, channel_id)
     }
 }

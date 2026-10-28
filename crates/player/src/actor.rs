@@ -891,7 +891,12 @@ impl Actor {
             Some(0) => {
                 if self.alone_since.is_none() {
                     self.alone_since = Some(Instant::now());
-                    if self.current.is_some() && !self.paused && self.set_paused(true).is_ok() {
+                    let pause = self.shared.settings.current().pause_when_alone;
+                    if pause
+                        && self.current.is_some()
+                        && !self.paused
+                        && self.set_paused(true).is_ok()
+                    {
                         info!(guild_id = self.guild_id, "Niemand hört zu – pausiert");
                         self.auto_paused = true;
                     }
@@ -996,7 +1001,8 @@ impl Actor {
         self.paused = saved.paused;
         self.queue = saved.queue.into();
 
-        if self.listeners(saved.voice_channel) == Some(0) {
+        let stay = !self.shared.settings.current().pause_when_alone;
+        if !stay && self.listeners(saved.voice_channel) == Some(0) {
             info!(
                 guild_id = self.guild_id,
                 "Niemand im Sprachkanal – Wiederherstellung übersprungen"

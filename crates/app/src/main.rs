@@ -12,20 +12,34 @@ use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
 use lemusic_bot::{BotDeps, CachePresence, build_client};
-use lemusic_core::{Db, EnvConfig, Health, LogFormat, SettingsStore};
+use lemusic_core::{
+    Db, EnvConfig, Health, LogBuffer, LogFormat, SettingsStore, auth::AdminBootstrap,
+};
 use lemusic_player::PlayerManager;
 use lemusic_web::WebState;
 use tokio::sync::watch;
 use tracing::{error, info, warn};
 
-fn init_logging() {
-    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
-        .unwrap_or_else(|_| "info,serenity=warn,songbird=warn".into());
-    let builder = tracing_subscriber::fmt().with_env_filter(filter);
-    match LogFormat::from_env() {
-        LogFormat::Json => builder.json().init(),
-        LogFormat::Text => builder.init(),
-    }
+/// Logging auf stdout (Text oder JSON) und in den Puffer der Weboberfläche.
+fn init_logging() -> LogBuffer {
+    use tracing_subscriber::{
+        EnvFilter, Layer as _, layer::SubscriberExt, util::SubscriberInitExt,
+    };
+
+    let filter = || {
+        EnvFilter::try_from_default_env()
+            .unwrap_or_else(|_| "info,serenity=warn,songbird=warn".into())
+    };
+    let logs = LogBuffer::default();
+    let stdout = match LogFormat::from_env() {
+        LogFormat::Json => tracing_subscriber::fmt::layer().json().boxed(),
+        LogFormat::Text => tracing_subscriber::fmt::layer().boxed(),
+    };
+    tracing_subscriber::registry()
+        .with(stdout.with_filter(filter()))
+        .with(logs.layer().with_filter(filter()))
+        .init();
+    logs
 }
 
 #[tokio::main]
@@ -40,15 +54,15 @@ async fn main() -> Result<()> {
         _ => {}
     }
 
-    init_logging();
-    if let Err(e) = run().await {
+    let logs = init_logging();
+    if let Err(e) = run(logs).await {
         error!(error = format!("{e:#}"), "Bot beendet mit Fehler");
         return Err(e);
     }
     Ok(())
 }
 
-async fn run() -> Result<()> {
+async fn run(logs: LogBuffer) -> Result<()> {
     let config = EnvConfig::from_env()?;
     info!(
         version = env!("CARGO_PKG_VERSION"),
@@ -57,6 +71,7 @@ async fn run() -> Result<()> {
     );
 
     let db = Db::open(&config.database_path()).await?;
+    bootstrap_admin(&db).await?;
     let settings = SettingsStore::load(db.clone()).await?;
     let health = Arc::new(Health::default());
     let songbird = songbird::Songbird::serenity();
@@ -71,10 +86,16 @@ async fn run() -> Result<()> {
     // Ein Signal, auf das alle Teile beim Herunterfahren hören.
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
 
-    let web_state = WebState {
-        db: db.clone(),
-        health: health.clone(),
-    };
+    let web_state = WebState::new(
+        db.clone(),
+        health.clone(),
+        players.clone(),
+        settings.clone(),
+        presence.clone(),
+        logs,
+        config.guild_id,
+    );
+    spawn_session_cleanup(db.clone());
     let mut web_shutdown = shutdown_rx.clone();
     let web = tokio::spawn(lemusic_web::serve(config.web_bind, web_state, async move {
         let _ = web_shutdown.wait_for(|stop| *stop).await;
@@ -117,6 +138,44 @@ async fn run() -> Result<()> {
     db.close().await;
     info!("Beendet");
     result.context("Discord-Verbindung beendet")
+}
+
+/// Legt beim ersten Start den Admin-Account für die Weboberfläche an.
+async fn bootstrap_admin(db: &Db) -> Result<()> {
+    let user = std::env::var("ADMIN_USER").ok();
+    let password = std::env::var("ADMIN_PASSWORD").ok();
+    match db.ensure_admin(user, password).await? {
+        AdminBootstrap::Existing => {}
+        AdminBootstrap::CreatedFromEnv => {
+            info!("Admin-Account aus ADMIN_USER/ADMIN_PASSWORD angelegt")
+        }
+        AdminBootstrap::CreatedRandom { username, password } => {
+            // Bewusst nur auf stdout, nicht in den Log-Puffer der Weboberfläche.
+            println!(
+                "\n==============================================================\n\
+                 Weboberfläche: Admin-Account angelegt\n  Benutzer: {username}\n  Passwort: {password}\n\
+                 Bitte nach dem ersten Login unter „Konto“ ändern.\n\
+                 ==============================================================\n"
+            );
+            warn!(
+                "Kein ADMIN_PASSWORD gesetzt – zufälliges Passwort erzeugt (siehe Container-Ausgabe)"
+            );
+        }
+    }
+    Ok(())
+}
+
+/// Räumt abgelaufene Sitzungen stündlich auf.
+fn spawn_session_cleanup(db: Db) {
+    tokio::spawn(async move {
+        let mut interval = tokio::time::interval(std::time::Duration::from_secs(3600));
+        loop {
+            interval.tick().await;
+            if let Err(e) = db.purge_expired_sessions().await {
+                warn!(error = %e, "Sitzungen nicht aufräumbar");
+            }
+        }
+    });
 }
 
 async fn wait_for_signal() {
