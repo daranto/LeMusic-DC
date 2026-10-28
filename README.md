@@ -1,132 +1,57 @@
 # LeMusic 🎵
 
-Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Rust – ein Neubau von [jagrosh/MusicBot](https://github.com/jagrosh/MusicBot) mit Fokus auf Ausfallsicherheit. Läuft als ein einziger Docker-Container und wird über eine Weboberfläche konfiguriert.
+[🇩🇪 Deutsch](#deutsch) · [🇬🇧 English](#english)
 
-## Was ihn stabil macht
+---
 
-- **Kein Audio-Aussetzer durch Netzwerk:** Jeder Track wird von yt-dlp komplett in den Speicher geladen und vorgepuffert, bevor er startet. Der Audio-Takt (20 ms) liest nie direkt aus dem Netz.
-- **Selbstheilend:** Fehlgeschlagene oder vorzeitig abgebrochene Tracks werden ab der letzten Position bis zu 2× neu versucht, hängende Streams erkannt, dann übersprungen. Abgestürzte Player werden automatisch neu gestartet.
-- **Neustart-fest:** Warteschlange, Position, Lautstärke und Wiederholen liegen in SQLite. Nach einem Neustart oder Update läuft die Musik an derselben Stelle weiter.
-- **Reconnect:** Bricht die Voice-Verbindung ab, verbindet sich der Bot mit Backoff neu und setzt fort.
-- **Immer aktuelles yt-dlp:** Wird bei jedem Containerstart (und per Klick in der Weboberfläche) aktualisiert.
-- **DAVE (Ende-zu-Ende-Verschlüsselung von Discord)** wird nativ unterstützt (songbird 0.6).
-- Healthcheck, sauberes Herunterfahren, Log-Rotation, keine `unwrap()`s im Code.
+## Deutsch
 
-## Schnellstart
+Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Rust – ein Neubau von [jagrosh/MusicBot](https://github.com/jagrosh/MusicBot). Läuft als ein Docker-Container und wird über eine Weboberfläche konfiguriert.
 
-### 1. Discord-Bot anlegen
+**Highlights**
+- Keine Aussetzer: Tracks werden vollständig geladen und vorgepuffert, der nächste Track liegt bereit (Skip < 1 s)
+- Selbstheilend: Retry ab letzter Position, Reconnect, abgestürzte Player starten neu
+- Neustart-fest: Warteschlange und Position überleben Neustarts und Updates
+- Weboberfläche mit Admin-Login: Wiedergabe, Playlists, Einstellungen, Logs, yt-dlp-Update
+- Discords Ende-zu-Ende-Verschlüsselung (DAVE) wird unterstützt
 
-1. [Discord Developer Portal](https://discord.com/developers/applications) → **New Application**
-2. **Bot** → **Reset Token** → Token kopieren
-3. Bot einladen (APP_ID = „Application ID“ unter *General Information*):
-   ```
-   https://discord.com/oauth2/authorize?client_id=APP_ID&scope=bot+applications.commands&permissions=3165184
-   ```
-   (Rechte: Kanäle sehen, Nachrichten senden, Links einbetten, Verbinden, Sprechen)
-4. Server-ID kopieren: Discord → Einstellungen → Erweitert → *Entwicklermodus* an, dann Rechtsklick auf den Server → **Server-ID kopieren**
-
-### 2. Konfigurieren und starten
+**Schnellstart**
 
 ```bash
-cp .env.example .env
-```
-
-In `.env` mindestens `DISCORD_TOKEN`, `GUILD_ID` und `ADMIN_PASSWORD` eintragen, dann:
-
-```bash
+git clone https://github.com/daranto/LeMusic-DC.git && cd LeMusic-DC
+cp .env.example .env        # DISCORD_TOKEN, GUILD_ID, ADMIN_PASSWORD eintragen
 docker compose up -d --build
 ```
 
-Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWORD`).
+Weboberfläche: http://localhost:8080 · Befehle in Discord: `/play`, `/search`, `/skip`, `/queue`, `/playlist` …
 
-> Ohne `ADMIN_PASSWORD` wird beim ersten Start ein zufälliges Passwort erzeugt und einmalig ausgegeben: `docker compose logs lemusic | grep -A3 Admin-Account`
+Ausführliche Anleitung (Bot anlegen, alle Befehle, Betrieb, Fehlerbehebung): **[docs/HANDBUCH.md](docs/HANDBUCH.md)**
 
-## Befehle
+---
 
-| Befehl | Beschreibung | Recht |
-|---|---|---|
-| `/play <Link oder Suche> [soundcloud] [next]` | Abspielen/Einreihen, auch Playlists | alle (`next`: DJ) |
-| `/search <Suche> [soundcloud]` | 5 Treffer zur Auswahl | alle |
-| `/skip` | Überspringen – direkt für DJ und Wünschenden, sonst Abstimmung | alle |
-| `/forceskip`, `/skipto <Pos>` | Sofort überspringen / springen | DJ |
-| `/pause`, `/resume`, `/stop` | Pause, weiter, stoppen & Kanal verlassen | DJ |
-| `/seek <1:30>` | Spulen | DJ / Wünschender |
-| `/volume [0–200]` | Lautstärke anzeigen/setzen | DJ |
-| `/nowplaying` | Aktueller Track mit Fortschritt | alle |
-| `/queue [Seite]` | Warteschlange | alle |
-| `/remove <Pos>` | Track entfernen | eigene / DJ |
-| `/move <von> <nach>`, `/shuffle`, `/clear` | Warteschlange bearbeiten | DJ |
-| `/repeat <aus\|Track\|alle>` | Wiederholen | DJ |
-| `/playlist play\|save\|add\|list\|show\|delete` | Gespeicherte Playlists | play/list/show: alle, sonst DJ |
+## English
 
-**DJ** = Admins, Server-Manager und Mitglieder mit der DJ-Rolle. Ist keine DJ-Rolle eingestellt, sind alle DJ.
+A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust – a rewrite of [jagrosh/MusicBot](https://github.com/jagrosh/MusicBot). Runs as a single Docker container and is configured through a web UI.
 
-## Weboberfläche
+**Highlights**
+- No dropouts: tracks are fully downloaded and pre-buffered, the next track is ready ahead of time (skip < 1 s)
+- Self-healing: retries from the last position, voice reconnect, crashed players restart
+- Restart-proof: queue and position survive restarts and updates
+- Web UI with admin login: playback, playlists, settings, logs, one-click yt-dlp update
+- Supports Discord's end-to-end voice encryption (DAVE)
 
-- **Wiedergabe:** Live-Status, Cover, Fortschritt, Steuerung, Lautstärke, Spulen, Warteschlange sortieren, direkt in einen Sprachkanal abspielen
-- **Playlists:** anlegen (aus der Warteschlange), bearbeiten, abspielen
-- **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein; DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, Ansagen
-- **System:** yt-dlp aktualisieren, Selbsttest, YouTube-Cookies
-- **Logs** live, **Konto** (Passwort ändern)
-
-Änderungen wirken sofort, ohne Neustart.
-
-## Betrieb
-
-| Aufgabe | Befehl |
-|---|---|
-| Logs | `docker compose logs -f` |
-| Neustart (aktualisiert yt-dlp, Musik läuft weiter) | `docker compose restart` |
-| Update nach Code-Änderung | `docker compose up -d --build` |
-| Gesundheit | `curl localhost:8080/health` |
-| Selbsttest ohne Discord | `docker compose exec lemusic lemusic selftest never gonna give you up` |
-| Backup | Ordner `data/` sichern (enthält `lemusic.db`) |
-
-### Wenn YouTube streikt
-
-1. Weboberfläche → **System** → *yt-dlp jetzt aktualisieren* (oder `docker compose restart`)
-2. **Selbsttest** ausführen
-3. Meldet YouTube „Sign in to confirm you're not a bot“: mit einem **Zweit-Account** eine `cookies.txt` exportieren (Browser-Erweiterung „Get cookies.txt LOCALLY“) und unter **System → YouTube-Cookies** hochladen. Das schaltet auch **altersbeschränkte Videos** frei (sonst werden sie mit Hinweis übersprungen).
-
-Hintergrund: Der erste Ladeversuch nutzt YouTube-Clients ohne Zwangspause (Start in ~5 s). Scheitert er, versucht der Bot es bis zu 2× mit den yt-dlp-Standardeinstellungen, die teils ~30 s Wartezeit von YouTube erfordern – vorbereitete Tracks laden das unbemerkt im Hintergrund.
-
-## Umgebungsvariablen
-
-| Variable | Pflicht | Bedeutung |
-|---|---|---|
-| `DISCORD_TOKEN` | ✅ | Bot-Token |
-| `GUILD_ID` | ✅ | ID deines Servers (Befehle werden dort sofort registriert) |
-| `ADMIN_USER` / `ADMIN_PASSWORD` | empfohlen | Login der Weboberfläche (nur beim ersten Start übernommen) |
-| `YTDLP_AUTO_UPDATE` | | yt-dlp beim Start aktualisieren (Standard `true`) |
-| `LOG_FORMAT` | | `text` (Standard) oder `json` |
-| `RUST_LOG` | | Log-Level, z. B. `info,serenity=warn,songbird=warn` |
-| `WEB_BIND` / `DATA_DIR` | | Standard `0.0.0.0:8080` / `/data` |
-
-## Architektur
-
-```
-Discord ──▶ serenity/poise (Befehle) ──▶ PlayerManager ──▶ Player-Actor je Server
-                                                              │  Warteschlange, Retry,
-Browser ──▶ axum (JSON-API, Login) ──────────────────────────┘  Persistenz, Reconnect
-                                                              ▼
-                       songbird (Voice, DAVE) ◀── PCM ◀── ffmpeg ◀── Speicher ◀── yt-dlp
-```
-
-| Crate | Aufgabe |
-|---|---|
-| `crates/core` | Konfiguration, SQLite, Einstellungen, Playlists, Login, Log-Puffer |
-| `crates/player` | yt-dlp/ffmpeg-Quelle mit Vorpuffer, Player-Actor, Manager, Selbsttest |
-| `crates/bot` | Discord-Befehle, Embeds, Rechte, Event-Weiterleitung |
-| `crates/web` | Weboberfläche und API |
-| `crates/app` | Start, Verdrahtung, Herunterfahren, `selftest`/`healthcheck` |
-
-Warum nicht Lavalink? Siehe [PLAN.md](PLAN.md) – kurz: SoundCloud war dort kaputt und DAVE verursachte Aussetzer.
-
-## Entwicklung
-
-Voraussetzungen: Rust (rustup), `cmake`, `libopus`, Docker.
+**Quick start**
 
 ```bash
-cargo clippy --all-targets
-cargo test
+git clone https://github.com/daranto/LeMusic-DC.git && cd LeMusic-DC
+cp .env.example .env        # set DISCORD_TOKEN, GUILD_ID, ADMIN_PASSWORD
+docker compose up -d --build
 ```
+
+Web UI: http://localhost:8080 · Discord commands: `/play`, `/search`, `/skip`, `/queue`, `/playlist` …
+
+The bot invite link needs the scopes `bot` + `applications.commands` and the permissions View Channel, Send Messages, Embed Links, Connect and Speak (`permissions=3165184`). The detailed manual is in German: [docs/HANDBUCH.md](docs/HANDBUCH.md).
+
+---
+
+**Stack:** Rust · serenity/poise · songbird · yt-dlp · ffmpeg · axum · SQLite · Docker — License: [MIT](LICENSE)
