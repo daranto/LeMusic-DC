@@ -45,6 +45,9 @@ COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
 COPY --from=builder /build/target/release/lemusic /usr/local/bin/lemusic
 COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
+# Start als root nur, um die Rechte von /data zu korrigieren – der
+# Entrypoint wechselt sofort auf „lemusic“.
+USER root
 WORKDIR /data
 VOLUME ["/data"]
 EXPOSE 8080

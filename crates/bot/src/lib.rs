@@ -46,6 +46,7 @@ pub struct BotDeps {
 /// Baut den Discord-Client (startet ihn aber noch nicht).
 pub async fn build_client(config: &EnvConfig, deps: BotDeps) -> Result<serenity::Client> {
     let guild_id = serenity::GuildId::new(config.guild_id);
+    check_token(&config.discord_token).await?;
     let BotDeps {
         settings,
         health,
@@ -102,6 +103,31 @@ pub async fn build_client(config: &EnvConfig, deps: BotDeps) -> Result<serenity:
         .register_songbird_with(songbird)
         .await?;
     Ok(client)
+}
+
+/// Prüft den Token vorab – sonst hängt der Gateway-Login bei einem falschen
+/// Token still, statt mit einer klaren Meldung abzubrechen.
+async fn check_token(token: &str) -> Result<()> {
+    let http = serenity::Http::new(token);
+    match http.get_current_user().await {
+        Ok(user) => {
+            info!(bot = %user.name, "Discord-Token gültig");
+            Ok(())
+        }
+        Err(serenity::Error::Http(e))
+            if e.status_code() == Some(serenity::StatusCode::UNAUTHORIZED) =>
+        {
+            anyhow::bail!(
+                "DISCORD_TOKEN ist ungültig – im Discord Developer Portal unter „Bot“ einen neuen Token erzeugen und in .env eintragen"
+            )
+        }
+        // Netzwerkprobleme o. Ä.: nicht abbrechen, der Client verbindet sich
+        // selbst erneut.
+        Err(e) => {
+            warn!(error = %e, "Discord-Token nicht prüfbar – versuche trotzdem zu verbinden");
+            Ok(())
+        }
+    }
 }
 
 /// Hält den Discord-Status aktuell, wenn sich die Einstellungen ändern.
