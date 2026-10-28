@@ -341,6 +341,12 @@ $("#play-form").addEventListener("submit", async (ev) => {
   refreshPlayer();
 });
 
+$("#btn-join").addEventListener("click", (ev) => {
+  const voice_channel = $("#voice-select").value;
+  if (!voice_channel) return toast("Bitte einen Sprachkanal auswählen", "error");
+  run(ev.currentTarget, () => api("POST", "/player/join", { voice_channel }), "Beigetreten").then(refreshPlayer);
+});
+
 // ---------------------------------------------------------------------------
 // Playlists
 // ---------------------------------------------------------------------------

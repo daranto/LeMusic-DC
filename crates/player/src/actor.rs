@@ -53,6 +53,8 @@ pub(crate) type Reply<T> = oneshot::Sender<Result<T>>;
 
 pub(crate) enum Msg {
     Enqueue(EnqueueRequest, Reply<EnqueueOutcome>),
+    /// Sprachkanal betreten, ohne etwas abzuspielen (Sprachkanal, Textkanal).
+    Join(u64, Option<u64>, Reply<()>),
     Skip(Reply<Option<QueueEntry>>),
     SkipTo(usize, Reply<()>),
     Pause(Reply<()>),
@@ -203,6 +205,10 @@ impl Actor {
         match msg {
             Msg::Enqueue(req, reply) => {
                 let r = self.enqueue(req).await;
+                let _ = reply.send(r);
+            }
+            Msg::Join(channel, text_channel, reply) => {
+                let r = self.join(channel, text_channel).await;
                 let _ = reply.send(r);
             }
             Msg::Skip(reply) => {
@@ -462,6 +468,19 @@ impl Actor {
             self.prepare_next().await;
             Ok(EnqueueOutcome { added, position })
         }
+    }
+
+    /// Betritt einen Sprachkanal (bzw. wechselt ihn, solange nichts läuft).
+    /// Ohne Wiedergabe greift danach das Inaktivitäts-Timeout.
+    async fn join(&mut self, channel: u64, text_channel: Option<u64>) -> Result<()> {
+        self.ensure_joined(channel).await?;
+        if text_channel.is_some() {
+            self.text_channel = text_channel;
+        }
+        if self.current.is_none() {
+            self.idle_since = Some(Instant::now());
+        }
+        Ok(())
     }
 
     fn new_entry(&mut self, meta: TrackMeta, requester: u64) -> QueueEntry {

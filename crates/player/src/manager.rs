@@ -180,6 +180,11 @@ impl Player {
     pub async fn enqueue(&self, req: EnqueueRequest) -> Result<EnqueueOutcome> {
         self.request(|r| Msg::Enqueue(req, r)).await
     }
+    /// Betritt einen Sprachkanal, ohne etwas abzuspielen.
+    pub async fn join(&self, voice_channel: u64, text_channel: Option<u64>) -> Result<()> {
+        self.request(|r| Msg::Join(voice_channel, text_channel, r))
+            .await
+    }
     /// Überspringt den aktuellen Track; liefert ihn zurück.
     pub async fn skip(&self) -> Result<Option<QueueEntry>> {
         self.request(Msg::Skip).await

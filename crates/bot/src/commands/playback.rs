@@ -202,6 +202,41 @@ pub async fn search(
     enqueue_and_reply(ctx, vec![chosen], false).await
 }
 
+/// Holt den Bot in deinen Sprachkanal, ohne etwas abzuspielen.
+#[poise::command(slash_command, guild_only, aliases("summon"))]
+pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
+    let settings = guild_settings(ctx).await?;
+    let channel = checks::target_voice_channel(ctx, &settings)?;
+    checks::player(ctx)?
+        .join(channel, Some(ctx.channel_id().get()))
+        .await?;
+    let timeout = ctx.data().settings.current().idle_timeout_secs;
+    let hint = if timeout > 0 {
+        format!(
+            "\nOhne Wiedergabe gehe ich nach {} wieder.",
+            format_duration(Duration::from_secs(timeout))
+        )
+    } else {
+        String::new()
+    };
+    ctx.send(CreateReply::default().embed(embeds::success(&format!(
+        "👋 Bin da in {} – mit `/play` geht's los.{hint}",
+        embeds::mention_channel(channel)
+    ))))
+    .await?;
+    Ok(())
+}
+
+/// Verlässt den Sprachkanal und leert die Warteschlange (DJ).
+#[poise::command(slash_command, guild_only, aliases("disconnect"))]
+pub async fn leave(ctx: Context<'_>) -> Result<(), Error> {
+    require_dj(ctx).await?;
+    checks::player(ctx)?.stop().await?;
+    ctx.send(CreateReply::default().embed(embeds::info("👋 Tschüss!")))
+        .await?;
+    Ok(())
+}
+
 /// Überspringt den Track – direkt für DJs und den Wünschenden, sonst per Abstimmung.
 #[poise::command(slash_command, guild_only)]
 pub async fn skip(ctx: Context<'_>) -> Result<(), Error> {

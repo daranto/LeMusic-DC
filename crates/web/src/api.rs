@@ -226,6 +226,26 @@ pub(crate) async fn play(
     enqueue(&state, tracks, channel, form.next).await
 }
 
+#[derive(Deserialize)]
+pub(crate) struct JoinForm {
+    voice_channel: Option<String>,
+}
+
+pub(crate) async fn join(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Json(form): Json<JoinForm>,
+) -> ApiResult {
+    let channel = parse_channel(form.voice_channel.as_deref())?
+        .ok_or_else(|| ApiError::bad_request("Bitte einen Sprachkanal auswählen"))?;
+    state
+        .players
+        .player(state.guild_id)
+        .join(channel, None)
+        .await?;
+    ok()
+}
+
 #[derive(Deserialize, Default)]
 #[serde(default)]
 pub(crate) struct ActionForm {

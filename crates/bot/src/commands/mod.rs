@@ -10,6 +10,8 @@ pub fn all() -> Vec<poise::Command<Data, Error>> {
     vec![
         playback::play(),
         playback::search(),
+        playback::join(),
+        playback::leave(),
         playback::skip(),
         playback::forceskip(),
         playback::pause(),

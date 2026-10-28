@@ -66,6 +66,7 @@ pub fn router(state: WebState) -> Router {
         .route("/overview", get(api::overview))
         .route("/player", get(api::player))
         .route("/player/play", post(api::play))
+        .route("/player/join", post(api::join))
         .route("/player/{action}", post(api::player_action))
         .route(
             "/settings/bot",
