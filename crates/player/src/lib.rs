@@ -1,6 +1,7 @@
 //! Audio: Links/Suchen auflösen, Streams erzeugen, Player pro Server.
 
 mod actor;
+pub mod diagnostics;
 mod manager;
 pub mod model;
 pub mod resolve;

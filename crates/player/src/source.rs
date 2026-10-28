@@ -49,6 +49,8 @@ const BUFFER_CHUNKS: usize = 15 * BYTES_PER_SECOND / CHUNK_SIZE;
 /// Obergrenze für den komprimierten Download im Speicher (darüber greift
 /// Gegendruck auf yt-dlp, z. B. bei stundenlangen Mixes).
 const SPOOL_LIMIT_BYTES: usize = 192 * 1024 * 1024;
+/// `nice`-Wert für yt-dlp und ffmpeg (höher = niedrigere Priorität).
+const HELPER_NICENESS: &str = "10";
 /// Bis hierhin muss yt-dlp die ersten Daten geliefert haben (ab Anfang).
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 /// Bei Wiederholungen großzügiger: YouTube verlangt bei den Standard-Clients
@@ -100,8 +102,13 @@ impl YtDlpSource {
         // Arbeitsverzeichnis – daher ein eigenes Temp-Verzeichnis.
         let workdir = fragment_dir();
         std::fs::create_dir_all(&workdir)?;
-        let mut cmd = Command::new("yt-dlp");
-        cmd.current_dir(&workdir).args(crate::ytdlp_base_args());
+        // Hilfsprogramme mit niedriger Priorität: Ihre CPU-Spitzen (yt-dlp
+        // samt JS-Runtime, ffmpeg beim Vorpuffern) dürfen den Audio-Takt
+        // nicht verzögern.
+        let mut cmd = Command::new("nice");
+        cmd.args(["-n", HELPER_NICENESS, "yt-dlp"])
+            .current_dir(&workdir)
+            .args(crate::ytdlp_base_args());
         if self.attempt == 0 {
             cmd.args(["--extractor-args", FAST_YOUTUBE_CLIENTS]);
         }
@@ -143,7 +150,8 @@ impl YtDlpSource {
         // alles davor. Bei einer Pipe geht es nicht anders, ist aber dank
         // vollständigem Download in den Speicher schnell.
         let start = format!("{:.3}", self.start_at.as_secs_f64());
-        let ffmpeg = Command::new("ffmpeg")
+        let ffmpeg = Command::new("nice")
+            .args(["-n", HELPER_NICENESS, "ffmpeg", "-threads", "1"])
             .args(["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-vn"])
             .args(["-ss", &start])
             .args(["-f", "f32le", "-ar", &SAMPLE_RATE.to_string()])

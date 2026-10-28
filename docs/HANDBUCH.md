@@ -94,6 +94,18 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 
 Hintergrund: Der erste Ladeversuch nutzt YouTube-Clients ohne Zwangspause (Start in ~5 s). Scheitert er, versucht der Bot es bis zu 2× mit den yt-dlp-Standardeinstellungen, die teils ~30 s Wartezeit von YouTube erfordern – vorbereitete Tracks laden das unbemerkt im Hintergrund.
 
+### Wo der Bot laufen sollte
+
+Discord braucht alle **20 ms** ein Audiopaket. Am besten läuft der Bot daher auf einem Rechner, der sonst wenig zu tun hat: Linux-Server, NAS, Mini-PC oder Raspberry Pi 4/5 (Image für arm64 vorhanden), per Kabel im Netz.
+
+Auf einem normal genutzten Desktop (Browser, Discord-Client, Backups …) kann das Betriebssystem den Bot gelegentlich 15–80 ms warten lassen – das ist als kurzer Aussetzer hörbar, obwohl der Bot selbst sauber arbeitet. Der Bot misst das und meldet es im Log:
+
+```
+WARN Audio-Takt gestört – mögliche Aussetzer (CPU-Last auf dem Host) verspaetete_wecker=7 max_verspaetung_ms=82
+```
+
+Erscheint diese Meldung, liegt die Ursache beim Host, nicht bei YouTube/SoundCloud oder dem Netz.
+
 ## Umgebungsvariablen
 
 | Variable | Pflicht | Bedeutung |

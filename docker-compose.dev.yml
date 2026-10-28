@@ -4,3 +4,6 @@ services:
   lemusic:
     image: lemusic:dev
     build: .
+    environment:
+      # Zusätzlich die Audio-Takt-Messung im Log (jede Minute).
+      RUST_LOG: info,serenity=warn,songbird=warn,lemusic_player::diagnostics=debug

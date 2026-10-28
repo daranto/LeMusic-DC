@@ -46,6 +46,7 @@ impl PlayerManager {
         presence: Arc<dyn VoicePresence>,
     ) -> Self {
         crate::source::clean_fragment_dir();
+        crate::diagnostics::spawn();
         let (events, _) = broadcast::channel(256);
         Self {
             shared: Arc::new(Shared {
