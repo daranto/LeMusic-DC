@@ -106,9 +106,9 @@ Ein Track wird erst unmittelbar vor dem Abspielen gestartet (lazy, mit 5 s Vorla
 - **Build:** mehrstufig (`rust:slim` + `cargo-chef`). Das Laufzeit-Image ist `python:3.13-slim` mit yt-dlp in einem venv, statischem ffmpeg, `libopus` und `tini`. Läuft ohne Root.
 - **Image-Größe:** etwa 600 MB. Größte Posten: yt-dlp-venv inkl. Deno 143 MB, ffmpeg 108 MB, Bot-Binary 14 MB.
 - **yt-dlp-Update:** Bei jedem Start aktualisiert der Entrypoint yt-dlp (`YTDLP_AUTO_UPDATE`). Bei einem YouTube-Problem reicht also `docker compose restart`.
-- **`.env`:** `DISCORD_TOKEN`, `GUILD_ID`, später auch `ADMIN_USER` und `ADMIN_PASSWORD`
+- **`.env`:** `DISCORD_TOKEN`, `GUILD_ID`, `ADMIN_USER`, `ADMIN_PASSWORD`
 - **Start:** `docker compose up -d`
-- Optional: GitHub Action, die multi-arch-Images (amd64 und arm64) baut.
+- GitHub Action (`.github/workflows/ci.yml`): fmt, clippy, Tests und Multi-Arch-Image (amd64 und arm64) nach GHCR.
 
 ## Phasen
 
@@ -120,11 +120,27 @@ Ein Track wird erst unmittelbar vor dem Abspielen gestartet (lazy, mit 5 s Vorla
 | 3 | **Befehle:** alle Befehle, DJ-Rechte, Voteskip, Seek, Playlists, Inaktivität | ✅ | Alle Funktionen sind vorhanden |
 | 4 | **Weboberfläche:** Login, Einstellungen, Live-Dashboard, Logs | ✅ | Alles ist im Browser einstellbar |
 | 5 | **Docker-Feinschliff:** Healthcheck, README, Image-Größe | ✅ | Ein `docker compose up -d` reicht |
-| 6 | **Härtung:** Chaos-Tests, 24-Stunden-Dauerlauf mit Playlist, Speicherverbrauch prüfen | | Läuft 24 h ohne Eingriff |
+| 6 | **Härtung:** Chaos-Tests, Dauerlauf mit Playlist, Speicherverbrauch prüfen | ✅ Chaos-Tests + 2 Dauerläufe · ⏳ 24-h-Lauf im Echtbetrieb | Läuft 24 h ohne Eingriff |
+
+## Testergebnisse (Phase 6)
+
+| Test | Ergebnis |
+|---|---|
+| ffmpeg mitten im Track hart beendet | Puffer spielt ~15 s weiter, Abbruch erkannt, Neustart ab gleicher Position |
+| Netzwerk 30 s getrennt | Wiedergabe läuft durch, yt-dlp setzt Download fort |
+| Bot-Prozess per `kill -9` | Docker startet neu, Wiedergabe ab gespeicherter Position |
+| Neustart/Update (`docker compose restart`, Neuanlage) | Warteschlange, Position, Lautstärke, Wiederholen bleiben erhalten |
+| Inaktivität / niemand im Kanal | Auto-Pause, Verlassen nach Timeout |
+| Skip | nächster Track < 1 s (vorbereitet) |
+| Seek in 2-h-Mix | 8:24 → 4 s, 20:00 → 8 s, 45:00 → 13 s |
+| Echtzeit-Lesetest | 0 Blockaden, langsamster Lesevorgang < 5 ms (Takt 20 ms) |
+| Dauerlauf 1 (32 min, 11 Tracks) | fand YouTube-Zwangspause (→ schnelle Clients) und altersbeschränkte Videos (→ sofort überspringen) |
+| Dauerlauf 2 (30 min, 9 Tracks, mit Fixes) | 0 Ladehänger, 0 Warnungen, Health durchgehend OK, max. 128 MB |
+| Speicher | 30–300 MB (Limit 1 GB) |
 
 ## Lokale Entwicklung
 
 - Rust über `rustup` (Minimal-Profil), `cmake` über Homebrew (für libopus), Docker über OrbStack
 - Prüfen: `cargo clippy`
-- Selbsttest: `docker run --rm lemusic:dev selftest <URL>`
+- Selbsttest: `docker compose exec lemusic lemusic selftest [--soundcloud] [--start 1:30] <URL oder Suche>`
 - Bot starten: `.env` ausfüllen, dann `docker compose up -d --build`

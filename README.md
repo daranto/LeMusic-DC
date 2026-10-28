@@ -86,7 +86,9 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 
 1. Weboberfläche → **System** → *yt-dlp jetzt aktualisieren* (oder `docker compose restart`)
 2. **Selbsttest** ausführen
-3. Meldet YouTube „Sign in to confirm you're not a bot“: mit einem **Zweit-Account** eine `cookies.txt` exportieren (Browser-Erweiterung „Get cookies.txt LOCALLY“) und unter **System → YouTube-Cookies** hochladen.
+3. Meldet YouTube „Sign in to confirm you're not a bot“: mit einem **Zweit-Account** eine `cookies.txt` exportieren (Browser-Erweiterung „Get cookies.txt LOCALLY“) und unter **System → YouTube-Cookies** hochladen. Das schaltet auch **altersbeschränkte Videos** frei (sonst werden sie mit Hinweis übersprungen).
+
+Hintergrund: Der erste Ladeversuch nutzt YouTube-Clients ohne Zwangspause (Start in ~5 s). Scheitert er, versucht der Bot es bis zu 2× mit den yt-dlp-Standardeinstellungen, die teils ~30 s Wartezeit von YouTube erfordern – vorbereitete Tracks laden das unbemerkt im Hintergrund.
 
 ## Umgebungsvariablen
 
