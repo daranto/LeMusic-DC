@@ -11,8 +11,9 @@ mod selftest;
 use std::sync::Arc;
 
 use anyhow::{Context as _, Result};
-use lemusic_bot::{BotDeps, build_client, leave_all};
+use lemusic_bot::{BotDeps, CachePresence, build_client};
 use lemusic_core::{Db, EnvConfig, Health, LogFormat, SettingsStore};
+use lemusic_player::PlayerManager;
 use lemusic_web::WebState;
 use tokio::sync::watch;
 use tracing::{error, info, warn};
@@ -59,6 +60,13 @@ async fn run() -> Result<()> {
     let settings = SettingsStore::load(db.clone()).await?;
     let health = Arc::new(Health::default());
     let songbird = songbird::Songbird::serenity();
+    let presence = Arc::new(CachePresence::default());
+    let players = PlayerManager::new(
+        songbird.clone(),
+        db.clone(),
+        settings.clone(),
+        presence.clone(),
+    );
 
     // Ein Signal, auf das alle Teile beim Herunterfahren hören.
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
@@ -77,20 +85,24 @@ async fn run() -> Result<()> {
         BotDeps {
             settings,
             health: health.clone(),
-            songbird: songbird.clone(),
+            songbird,
+            players: players.clone(),
+            presence,
+            db: db.clone(),
         },
     )
     .await
     .context("Discord-Client konnte nicht erstellt werden")?;
 
     let shard_manager = client.shard_manager.clone();
-    let shutdown_songbird = songbird.clone();
+    let shutdown_players = players.clone();
     tokio::spawn(async move {
         wait_for_signal().await;
         info!("Fahre herunter …");
         let _ = shutdown_tx.send(true);
-        // Reihenfolge: erst Sprachkanäle sauber verlassen, dann Gateway zu.
-        leave_all(&shutdown_songbird).await;
+        // Reihenfolge: Zustand sichern und Sprachkanäle verlassen, dann
+        // Gateway schließen. Die Warteschlange läuft nach dem Neustart weiter.
+        shutdown_players.shutdown().await;
         shard_manager.shutdown_all().await;
     });
 

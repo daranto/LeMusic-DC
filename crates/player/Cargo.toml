@@ -8,8 +8,10 @@ license.workspace = true
 workspace = true
 
 [dependencies]
+lemusic-core.workspace = true
 anyhow.workspace = true
 async-trait.workspace = true
+fastrand.workspace = true
 flume.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -17,3 +19,4 @@ songbird.workspace = true
 symphonia.workspace = true
 tokio.workspace = true
 tracing.workspace = true
+uuid.workspace = true

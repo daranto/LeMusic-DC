@@ -40,7 +40,7 @@ pub async fn run(args: &[String]) -> Result<()> {
     );
 
     let started = Instant::now();
-    let input = YtDlpSource::input(first.url.clone())
+    let input = YtDlpSource::input(first.url.clone(), Duration::ZERO)
         .make_playable_async(codecs::get_codec_registry(), codecs::get_probe())
         .await
         .map_err(|e| anyhow!("Stream konnte nicht geöffnet werden: {e}"))?;

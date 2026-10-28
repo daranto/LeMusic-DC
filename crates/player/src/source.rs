@@ -51,11 +51,16 @@ const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
 /// Lazy Quelle für eine Track-URL.
 pub struct YtDlpSource {
     url: String,
+    /// Startposition (für Seek und Fortsetzen nach Neustart).
+    start_at: Duration,
 }
 
 impl YtDlpSource {
-    pub fn input(url: impl Into<String>) -> Input {
-        Input::Lazy(Box::new(Self { url: url.into() }))
+    pub fn input(url: impl Into<String>, start_at: Duration) -> Input {
+        Input::Lazy(Box::new(Self {
+            url: url.into(),
+            start_at,
+        }))
     }
 
     fn spawn(&self) -> io::Result<(ChildStdout, ChildGuard)> {
@@ -82,8 +87,13 @@ impl YtDlpSource {
             return Err(io::Error::other("yt-dlp stdout fehlt"));
         };
 
+        // `-ss` nach `-i`: ffmpeg dekodiert bis zur Position und verwirft
+        // alles davor. Bei einer Pipe geht es nicht anders, ist aber dank
+        // vollständigem Download in den Speicher schnell.
+        let start = format!("{:.3}", self.start_at.as_secs_f64());
         let ffmpeg = Command::new("ffmpeg")
             .args(["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-vn"])
+            .args(["-ss", &start])
             .args(["-f", "f32le", "-ar", &SAMPLE_RATE.to_string()])
             .args(["-ac", &CHANNELS.to_string(), "pipe:1"])
             .stdin(Stdio::piped())

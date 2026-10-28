@@ -1864,9 +1864,11 @@ name = "lemusic-bot"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "fastrand",
  "lemusic-core",
  "lemusic-player",
  "poise",
+ "serde_json",
  "serenity",
  "songbird",
  "tokio",
@@ -1891,13 +1893,16 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "fastrand",
  "flume 0.11.1",
+ "lemusic-core",
  "serde",
  "serde_json",
  "songbird",
  "symphonia",
  "tokio",
  "tracing",
+ "uuid",
 ]
 
 [[package]]

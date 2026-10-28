@@ -91,6 +91,29 @@ impl Db {
         Ok(())
     }
 
+    pub async fn delete(&self, key: &str) -> Result<()> {
+        sqlx::query("DELETE FROM settings WHERE key = ?")
+            .bind(key)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
+    /// Alle Schlüssel, die mit `prefix` beginnen.
+    pub async fn keys_with_prefix(&self, prefix: &str) -> Result<Vec<String>> {
+        let rows = sqlx::query("SELECT key FROM settings WHERE substr(key, 1, length(?1)) = ?1")
+            .bind(prefix)
+            .fetch_all(&self.pool)
+            .await?;
+        rows.into_iter()
+            .map(|row| Ok(row.try_get("key")?))
+            .collect()
+    }
+
+    pub(crate) fn pool(&self) -> &SqlitePool {
+        &self.pool
+    }
+
     /// Schließt alle Verbindungen (beim Herunterfahren).
     pub async fn close(&self) {
         self.pool.close().await;
