@@ -4,6 +4,10 @@ services:
     image: lemusic:dev
     restart: unless-stopped
     env_file: .env
+    ports:
+      # Weboberfläche – nur lokal erreichbar. Für Zugriff aus dem LAN
+      # „127.0.0.1:“ entfernen.
+      - "127.0.0.1:8080:8080"
     volumes:
       - ./data:/data
     stop_grace_period: 15s

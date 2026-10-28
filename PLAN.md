@@ -115,7 +115,7 @@ Ein Track wird erst unmittelbar vor dem Abspielen gestartet (lazy, mit 5 s Vorla
 | # | Phase | Status | Fertig, wenn … |
 |---|---|---|---|
 | 0 | **Spike:** Minimal-Bot, yt-dlp-/ffmpeg-Pipeline, Selbsttest | ✅ abgeschlossen (Live-Test ok, keine Aussetzer) | Der Bot spielt im privaten Server ab |
-| 1 | **Grundgerüst:** Workspace, Konfiguration, SQLite, Logging, Health | | Bot startet, Health ist grün |
+| 1 | **Grundgerüst:** Workspace, Konfiguration, SQLite, Logging, Health | ✅ | Bot startet, Health ist grün |
 | 2 | **Player-Kern:** Actor, Supervisor, Persistenz, Wiederverbindung, Watchdog | | Läuft trotz Netzwerkabbruch und Neustart weiter |
 | 3 | **Befehle:** alle Befehle, DJ-Rechte, Voteskip, Seek, Playlists, Inaktivität | | Alle Funktionen sind vorhanden |
 | 4 | **Weboberfläche:** Login, Einstellungen, Live-Dashboard, Logs | | Alles ist im Browser einstellbar |

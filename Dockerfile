@@ -37,6 +37,8 @@ RUN python -m venv /opt/yt-dlp \
     && /opt/yt-dlp/bin/pip install --no-cache-dir --upgrade "yt-dlp[default,deno]"
 ENV PATH="/opt/yt-dlp/bin:${PATH}" \
     HOME=/data \
+    DATA_DIR=/data \
+    WEB_BIND=0.0.0.0:8080 \
     YTDLP_AUTO_UPDATE=true
 
 COPY --from=ffmpeg /ffmpeg /usr/local/bin/ffmpeg
@@ -45,4 +47,8 @@ COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
 
 WORKDIR /data
 VOLUME ["/data"]
+EXPOSE 8080
+# Großzügige Startphase: Der Entrypoint aktualisiert vorher yt-dlp.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=90s --retries=3 \
+    CMD ["/usr/local/bin/lemusic", "healthcheck"]
 ENTRYPOINT ["/usr/bin/tini", "--", "/usr/local/bin/entrypoint.sh"]

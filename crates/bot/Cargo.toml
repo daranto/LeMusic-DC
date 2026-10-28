@@ -1,0 +1,18 @@
+[package]
+name = "lemusic-bot"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+lemusic-core.workspace = true
+lemusic-player.workspace = true
+anyhow.workspace = true
+poise.workspace = true
+serenity.workspace = true
+songbird.workspace = true
+tokio.workspace = true
+tracing.workspace = true

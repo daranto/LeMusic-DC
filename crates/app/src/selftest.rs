@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use anyhow::{Result, anyhow, bail};
 use songbird::input::{Input, LiveInput, codecs};
 
-use crate::{
+use lemusic_player::{
     resolve::{self, SearchSource},
     source::YtDlpSource,
 };
