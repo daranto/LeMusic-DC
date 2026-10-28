@@ -1,7 +1,10 @@
+# LeMusic – Start: .env anlegen (siehe .env.example), dann
+#   docker compose up -d
+# Update auf die neueste Version:
+#   docker compose pull && docker compose up -d
 services:
   lemusic:
-    build: .
-    image: lemusic:latest
+    image: ghcr.io/daranto/lemusic-dc:latest
     container_name: lemusic
     restart: unless-stopped
     env_file: .env

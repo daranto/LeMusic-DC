@@ -27,14 +27,18 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
 
 ### 2. Konfigurieren und starten
 
+Fertiges Image von GitHub (amd64 + arm64, z. B. auch Raspberry Pi 4/5):
+
 ```bash
-cp .env.example .env
+mkdir lemusic && cd lemusic
+curl -fsSLO https://raw.githubusercontent.com/daranto/LeMusic-DC/main/docker-compose.yml
+curl -fsSL https://raw.githubusercontent.com/daranto/LeMusic-DC/main/.env.example -o .env
 ```
 
 In `.env` mindestens `DISCORD_TOKEN`, `GUILD_ID` und `ADMIN_PASSWORD` eintragen, dann:
 
 ```bash
-docker compose up -d --build
+docker compose up -d
 ```
 
 Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWORD`).
@@ -77,7 +81,7 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 |---|---|
 | Logs | `docker compose logs -f` |
 | Neustart (aktualisiert yt-dlp, Musik läuft weiter) | `docker compose restart` |
-| Update nach Code-Änderung | `docker compose up -d --build` |
+| Update auf neueste Version | `docker compose pull && docker compose up -d` |
 | Gesundheit | `curl localhost:8080/health` |
 | Selbsttest ohne Discord | `docker compose exec lemusic lemusic selftest never gonna give you up` |
 | Backup | Ordner `data/` sichern (enthält `lemusic.db`) |
@@ -129,4 +133,8 @@ Voraussetzungen: Rust (rustup), `cmake`, `libopus`, Docker.
 ```bash
 cargo clippy --all-targets
 cargo test
+# Image lokal bauen und starten:
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 ```
+
+Jeder Push auf `main` baut über GitHub Actions ein neues Image (`:latest`, `:main`, `:sha-…`), Tags `v1.2.3` zusätzlich `:1.2.3`.

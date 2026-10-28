@@ -1,0 +1,6 @@
+# Entwicklung: Image lokal aus dem Quellcode bauen statt von GHCR zu laden.
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+services:
+  lemusic:
+    image: lemusic:dev
+    build: .
