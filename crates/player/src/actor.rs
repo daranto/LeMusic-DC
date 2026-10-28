@@ -920,7 +920,10 @@ impl Actor {
         if timeout.is_zero() || self.call.is_none() {
             return;
         }
-        let alone_too_long = self.alone_since.is_some_and(|t| t.elapsed() >= timeout);
+        // Im „Bleiben“-Modus (nicht pausieren, wenn allein) zählt nur echte
+        // Untätigkeit, nicht ein leerer Kanal.
+        let alone_too_long = self.shared.settings.current().pause_when_alone
+            && self.alone_since.is_some_and(|t| t.elapsed() >= timeout);
         let idle_too_long =
             self.current.is_none() && self.idle_since.is_some_and(|t| t.elapsed() >= timeout);
         if alone_too_long || idle_too_long {

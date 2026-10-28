@@ -18,8 +18,8 @@
 //! keine Verbindung offen, die während des laufenden Songs abreißen könnte.
 
 use std::{
-    io::{self, Read, Write},
-    process::{Child, ChildStdin, ChildStdout, Command, Stdio},
+    io::{self, BufRead, BufReader, Read, Write},
+    process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio},
     thread,
     time::{Duration, Instant},
 };
@@ -45,8 +45,26 @@ const BUFFER_CHUNKS: usize = 15 * BYTES_PER_SECOND / CHUNK_SIZE;
 /// Obergrenze für den komprimierten Download im Speicher (darüber greift
 /// Gegendruck auf yt-dlp, z. B. bei stundenlangen Mixes).
 const SPOOL_CHUNKS: usize = 256 * 1024 * 1024 / CHUNK_SIZE;
-/// Bis hierhin muss yt-dlp die ersten Daten geliefert haben.
+/// Bis hierhin muss yt-dlp die ersten Daten geliefert haben (ab Anfang).
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+/// Zusatzzeit pro Minute Startposition: Für einen Einstieg mitten im Track
+/// muss alles davor geladen und dekodiert werden (gemessen ~0,25 s/min).
+const STARTUP_PER_MINUTE: Duration = Duration::from_secs(2);
+
+/// Arbeitsverzeichnis für yt-dlp (temporäre Fragmente).
+pub fn fragment_dir() -> std::path::PathBuf {
+    std::env::temp_dir().join("lemusic-ytdlp")
+}
+
+/// Löscht Reste abgebrochener Downloads (beim Start aufrufen).
+pub fn clean_fragment_dir() {
+    let dir = fragment_dir();
+    if dir.exists()
+        && let Err(e) = std::fs::remove_dir_all(&dir)
+    {
+        warn!(error = %e, "Temp-Verzeichnis nicht aufräumbar");
+    }
+}
 
 /// Lazy Quelle für eine Track-URL.
 pub struct YtDlpSource {
@@ -64,12 +82,27 @@ impl YtDlpSource {
     }
 
     fn spawn(&self) -> io::Result<(ChildStdout, ChildGuard)> {
+        // Abgebrochene HLS-Downloads hinterlassen Fragmente im
+        // Arbeitsverzeichnis – daher ein eigenes Temp-Verzeichnis.
+        let workdir = fragment_dir();
+        std::fs::create_dir_all(&workdir)?;
         let mut ytdlp = Command::new("yt-dlp")
+            .current_dir(&workdir)
             .args(crate::ytdlp_base_args())
             .args([
                 "--quiet",
                 "--no-playlist",
                 "--no-part",
+                // Netzwerkaussetzer überbrücken: viele Versuche mit
+                // wachsender Pause (1 s … 20 s).
+                "--retries",
+                "20",
+                "--fragment-retries",
+                "20",
+                "--retry-sleep",
+                "http:exp=1:20",
+                "--retry-sleep",
+                "fragment:exp=1:20",
                 "-f",
                 "bestaudio/best",
                 "-o",
@@ -79,13 +112,14 @@ impl YtDlpSource {
             ])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .spawn()?;
 
-        let Some(ytdlp_out) = ytdlp.stdout.take() else {
+        let (Some(ytdlp_out), Some(ytdlp_err)) = (ytdlp.stdout.take(), ytdlp.stderr.take()) else {
             drop(ChildGuard(vec![ytdlp]));
-            return Err(io::Error::other("yt-dlp stdout fehlt"));
+            return Err(io::Error::other("yt-dlp-Pipes fehlen"));
         };
+        forward_stderr("yt-dlp", ytdlp_err);
 
         // `-ss` nach `-i`: ffmpeg dekodiert bis zur Position und verwirft
         // alles davor. Bei einer Pipe geht es nicht anders, ist aber dank
@@ -98,7 +132,7 @@ impl YtDlpSource {
             .args(["-ac", &CHANNELS.to_string(), "pipe:1"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .stderr(Stdio::inherit())
+            .stderr(Stdio::piped())
             .spawn();
 
         let mut ffmpeg = match ffmpeg {
@@ -109,10 +143,15 @@ impl YtDlpSource {
             }
         };
 
-        let (Some(stdout), Some(stdin)) = (ffmpeg.stdout.take(), ffmpeg.stdin.take()) else {
+        let (Some(stdout), Some(stdin), Some(stderr)) = (
+            ffmpeg.stdout.take(),
+            ffmpeg.stdin.take(),
+            ffmpeg.stderr.take(),
+        ) else {
             drop(ChildGuard(vec![ytdlp, ffmpeg]));
             return Err(io::Error::other("ffmpeg-Pipes fehlen"));
         };
+        forward_stderr("ffmpeg", stderr);
 
         let guard = ChildGuard(vec![ytdlp, ffmpeg]);
         spool(ytdlp_out, stdin)?;
@@ -128,7 +167,9 @@ impl Compose for YtDlpSource {
         let fail = |e: io::Error| AudioStreamError::Fail(Box::new(e));
         let (stdout, children) = self.spawn().map_err(fail)?;
         let mut stream = BufferedStream::start(stdout, children).map_err(fail)?;
-        stream.prebuffer().map_err(fail)?;
+        let minutes = u32::try_from(self.start_at.as_secs() / 60).unwrap_or(u32::MAX);
+        let timeout = STARTUP_TIMEOUT.saturating_add(STARTUP_PER_MINUTE.saturating_mul(minutes));
+        stream.prebuffer(timeout).map_err(fail)?;
 
         let raw = RawAdapter::new(ReadOnlySource::new(stream), SAMPLE_RATE, CHANNELS);
         Ok(AudioStream {
@@ -176,8 +217,8 @@ impl BufferedStream {
     }
 
     /// Wartet, bis genug Audio vorliegt oder der Strom (kurz) zu Ende ist.
-    fn prebuffer(&mut self) -> io::Result<()> {
-        let deadline = Instant::now() + STARTUP_TIMEOUT;
+    fn prebuffer(&mut self, timeout: Duration) -> io::Result<()> {
+        let deadline = Instant::now() + timeout;
         let mut buffered = 0;
         while buffered < PREBUFFER {
             let remaining = deadline.saturating_duration_since(Instant::now());
@@ -243,6 +284,31 @@ impl Read for BufferedStream {
         buf[..n].copy_from_slice(&self.current[self.pos..self.pos + n]);
         self.pos += n;
         Ok(n)
+    }
+}
+
+/// Leitet die Fehlerausgabe eines Hilfsprogramms ins Log. Echte Fehler von
+/// yt-dlp als Warnung, Wiederholungs-Meldungen und ffmpeg-Ausgaben (meist
+/// „Broken pipe“ nach Skip) nur auf Debug-Level.
+fn forward_stderr(program: &'static str, stderr: ChildStderr) {
+    let spawned = thread::Builder::new()
+        .name(format!("{program}-stderr"))
+        .spawn(move || {
+            for line in BufReader::new(stderr).lines() {
+                let Ok(line) = line else { return };
+                let line = line.trim();
+                if line.is_empty() {
+                    continue;
+                }
+                if program == "yt-dlp" && line.starts_with("ERROR") {
+                    warn!(program, "{line}");
+                } else {
+                    debug!(program, "{line}");
+                }
+            }
+        });
+    if let Err(e) = spawned {
+        debug!(error = %e, "stderr-Weiterleitung nicht startbar");
     }
 }
 

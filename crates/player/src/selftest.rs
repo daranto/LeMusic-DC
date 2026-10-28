@@ -32,7 +32,12 @@ impl SelfTestReport {
     }
 }
 
-pub async fn run(query: &str, source: SearchSource, seconds: f64) -> Result<SelfTestReport> {
+pub async fn run(
+    query: &str,
+    source: SearchSource,
+    start_at: Duration,
+    seconds: f64,
+) -> Result<SelfTestReport> {
     let started = Instant::now();
     let tracks = resolve(query, source).await?;
     let resolve_ms = started.elapsed().as_millis();
@@ -42,7 +47,7 @@ pub async fn run(query: &str, source: SearchSource, seconds: f64) -> Result<Self
         .ok_or_else(|| anyhow!("keine Tracks"))?;
 
     let started = Instant::now();
-    let input = YtDlpSource::input(first.url.clone(), Duration::ZERO)
+    let input = YtDlpSource::input(first.url.clone(), start_at)
         .make_playable_async(codecs::get_codec_registry(), codecs::get_probe())
         .await
         .map_err(|e| anyhow!("Stream konnte nicht geöffnet werden: {e}"))?;

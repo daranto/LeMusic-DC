@@ -536,7 +536,7 @@ pub(crate) async fn selftest(_admin: Admin, Json(form): Json<SelfTestForm>) -> A
     } else {
         SearchSource::YouTube
     };
-    let report = selftest::run(&form.query, source, 10.0).await?;
+    let report = selftest::run(&form.query, source, Duration::ZERO, 10.0).await?;
     Ok(Json(json!({ "ok": report.ok(), "report": report })))
 }
 
