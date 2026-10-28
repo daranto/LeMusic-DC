@@ -109,7 +109,10 @@ pub fn spawn_player_event_forwarder(ctx: serenity::Context, players: PlayerManag
                 }
                 PlayerEvent::Changed { .. } => continue,
             };
-            let Some(channel) = channel else {
+            // Fester Ansage-Kanal hat Vorrang – so kommen auch Ansagen an,
+            // wenn über die Weboberfläche oder die Autoplaylist gestartet wurde.
+            let settings = GuildSettings::load(&db, guild_id).await.unwrap_or_default();
+            let Some(channel) = settings.announce_target(channel) else {
                 continue;
             };
             let channel = serenity::ChannelId::new(channel);

@@ -449,6 +449,10 @@ async function loadSettings() {
     const g = state.guild;
     fillSelect(f.dj_role, g?.roles ?? [], { empty: "— keine (alle sind DJ) —", selected: guild.dj_role ?? "" });
     fillSelect(f.text_channel, g?.text_channels ?? [], { empty: "— alle Kanäle —", selected: guild.text_channel ?? "" });
+    fillSelect(f.announce_channel, g?.text_channels ?? [], {
+      empty: "— Kanal des letzten Befehls —",
+      selected: guild.announce_channel ?? "",
+    });
     fillSelect(f.voice_channel, g?.voice_channels ?? [], { empty: "— alle Kanäle —", selected: guild.voice_channel ?? "" });
     fillSelect(f.autoplaylist, (lists ?? []).map((p) => ({ id: p.name, name: p.name })), {
       empty: "— keine —",
@@ -471,6 +475,7 @@ $("#guild-settings").addEventListener("submit", (ev) => {
   const body = {
     dj_role: d.dj_role || null,
     text_channel: d.text_channel || null,
+    announce_channel: d.announce_channel || null,
     voice_channel: d.voice_channel || null,
     skip_ratio: d.skip_ratio ?? 55,
     max_track_secs: (d.max_track_mins ?? 0) * 60,

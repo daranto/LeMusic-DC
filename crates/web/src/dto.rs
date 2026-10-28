@@ -92,6 +92,8 @@ pub struct GuildSettingsDto {
     pub max_track_secs: u64,
     pub autoplaylist: Option<String>,
     pub announce_tracks: bool,
+    #[serde(default)]
+    pub announce_channel: Option<String>,
 }
 
 fn id_to_string(id: Option<u64>) -> Option<String> {
@@ -115,6 +117,7 @@ impl From<&GuildSettings> for GuildSettingsDto {
             max_track_secs: s.max_track_secs,
             autoplaylist: s.autoplaylist.clone(),
             announce_tracks: s.announce_tracks,
+            announce_channel: id_to_string(s.announce_channel),
         }
     }
 }
@@ -132,6 +135,7 @@ impl GuildSettingsDto {
                 .map(|s| s.trim().to_string())
                 .filter(|s| !s.is_empty()),
             announce_tracks: self.announce_tracks,
+            announce_channel: parse_id(self.announce_channel, "Ansage-Kanal-ID")?,
         })
     }
 }
