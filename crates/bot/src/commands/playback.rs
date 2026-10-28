@@ -107,7 +107,6 @@ pub async fn play(
     #[description = "Auf SoundCloud statt YouTube suchen"] soundcloud: Option<bool>,
     #[description = "Vorne in die Warteschlange (DJ)"] next: Option<bool>,
 ) -> Result<(), Error> {
-    ctx.defer().await?;
     let tracks = resolve(&query, source(soundcloud)).await?;
     enqueue_and_reply(ctx, tracks, next.unwrap_or(false)).await
 }
@@ -119,7 +118,6 @@ pub async fn search(
     #[description = "Suchbegriff"] query: String,
     #[description = "Auf SoundCloud statt YouTube suchen"] soundcloud: Option<bool>,
 ) -> Result<(), Error> {
-    ctx.defer().await?;
     let results = search_tracks(&query, source(soundcloud), 5).await?;
 
     let menu_id = format!("search-{}", ctx.id());
@@ -325,7 +323,6 @@ pub async fn seek(
     if now.entry.requester != ctx.author().id.get() && !is_dj(ctx, &settings).await {
         bail!("Spulen dürfen nur DJs und wer den Track gewünscht hat");
     }
-    ctx.defer().await?;
     player.seek(target).await?;
     ctx.send(CreateReply::default().embed(embeds::info(&format!(
         "⏩ Springe zu `{}`",

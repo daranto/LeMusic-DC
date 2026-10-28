@@ -89,6 +89,33 @@ impl YtDlpItem {
     }
 }
 
+/// Fehler, bei denen ein erneuter Versuch sinnlos ist – mit verständlicher
+/// Begründung für die Nachricht im Kanal.
+pub fn permanent_reason(error: &str) -> Option<&'static str> {
+    const KNOWN: &[(&str, &str)] = &[
+        (
+            "confirm your age",
+            "altersbeschränkt (dafür sind YouTube-Cookies nötig)",
+        ),
+        ("Private video", "privates Video"),
+        ("members-only", "nur für Kanalmitglieder"),
+        ("Join this channel", "nur für Kanalmitglieder"),
+        (
+            "not available in your country",
+            "in diesem Land nicht verfügbar",
+        ),
+        ("copyright", "wegen Urheberrecht gesperrt"),
+        ("has been removed", "wurde entfernt"),
+        ("Video unavailable", "nicht verfügbar"),
+        ("This video is not available", "nicht verfügbar"),
+        ("HTTP Error 404", "nicht gefunden"),
+    ];
+    KNOWN
+        .iter()
+        .find(|(needle, _)| error.contains(needle))
+        .map(|(_, reason)| *reason)
+}
+
 pub fn is_url(query: &str) -> bool {
     query.starts_with("https://") || query.starts_with("http://")
 }
@@ -139,7 +166,12 @@ async fn run_ytdlp(target: &str) -> Result<Vec<TrackMeta>> {
             .find(|l| l.contains("ERROR"))
             .map(|l| l.trim_start_matches("ERROR:").trim())
             .unwrap_or("unbekannter Fehler");
-        bail!("Konnte nicht geladen werden: {reason}");
+        if let Some(reason) = permanent_reason(reason) {
+            bail!("Nicht abspielbar: {reason}");
+        }
+        // yt-dlp hängt gern lange Hilfetexte an – erster Satz reicht.
+        let short = reason.split(". ").next().unwrap_or(reason);
+        bail!("Konnte nicht geladen werden: {short}");
     }
 
     let item: YtDlpItem =

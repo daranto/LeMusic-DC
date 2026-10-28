@@ -52,7 +52,6 @@ async fn play(
     name: String,
     #[description = "Zufällige Reihenfolge"] shuffle: Option<bool>,
 ) -> Result<(), Error> {
-    ctx.defer().await?;
     let mut tracks = ctx
         .data()
         .db
@@ -104,7 +103,6 @@ async fn add(
     #[description = "Auf SoundCloud suchen"] soundcloud: Option<bool>,
 ) -> Result<(), Error> {
     require_dj(ctx).await?;
-    ctx.defer().await?;
     let source = if soundcloud.unwrap_or(false) {
         SearchSource::SoundCloud
     } else {

@@ -33,6 +33,7 @@ use crate::{
     model::{
         EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEntry, RepeatMode, Snapshot,
     },
+    resolve::permanent_reason,
 };
 
 /// Zeit, die wir Discord für den Voice-Handshake geben.
@@ -76,6 +77,22 @@ pub(crate) enum Msg {
     Disconnected {
         kicked: bool,
     },
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::resolve::permanent_reason;
+
+    #[test]
+    fn recognizes_permanent_errors() {
+        let age = "Stream ist leer – [youtube] OT2IKn6ycbA: Sign in to confirm your age. This video may be inappropriate";
+        assert_eq!(
+            permanent_reason(age),
+            Some("altersbeschränkt (dafür sind YouTube-Cookies nötig)")
+        );
+        assert_eq!(permanent_reason("Stream liefert keine Daten"), None);
+        assert_eq!(permanent_reason("Stream endete vorzeitig bei 1:23"), None);
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -487,7 +504,8 @@ impl Actor {
                 handle
             }
             None => {
-                let track = build_track(entry.meta.clone(), self.volume_factor(), start_at);
+                let track =
+                    build_track(entry.meta.clone(), self.volume_factor(), start_at, retries);
                 let handle = call.lock().await.play(track);
                 self.watch_track(&handle)?;
                 handle
@@ -553,7 +571,7 @@ impl Actor {
         let Some(call) = self.call.clone() else {
             return;
         };
-        let track = build_track(next.meta.clone(), self.volume_factor(), Duration::ZERO).pause();
+        let track = build_track(next.meta.clone(), self.volume_factor(), Duration::ZERO, 0).pause();
         let handle = call.lock().await.play(track);
         if let Err(e) = self.watch_track(&handle) {
             warn!(error = %e, "Events für vorbereiteten Track nicht registrierbar");
@@ -810,7 +828,8 @@ impl Actor {
             return;
         };
         let _ = current.handle.stop();
-        if current.retries < MAX_RETRIES {
+        let permanent = permanent_reason(&error);
+        if permanent.is_none() && current.retries < MAX_RETRIES {
             warn!(
                 title = %current.entry.meta.title,
                 attempt = current.retries + 1,
@@ -831,7 +850,7 @@ impl Actor {
             guild_id: self.guild_id,
             text_channel: self.text_channel,
             entry: current.entry,
-            error,
+            error: permanent.map(str::to_string).unwrap_or(error),
         });
         self.advance(false).await;
     }

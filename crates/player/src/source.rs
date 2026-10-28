@@ -20,6 +20,10 @@
 use std::{
     io::{self, BufRead, BufReader, Read, Write},
     process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio},
+    sync::{
+        Arc,
+        atomic::{AtomicUsize, Ordering},
+    },
     thread,
     time::{Duration, Instant},
 };
@@ -44,9 +48,16 @@ const PREBUFFER: usize = 2 * BYTES_PER_SECOND;
 const BUFFER_CHUNKS: usize = 15 * BYTES_PER_SECOND / CHUNK_SIZE;
 /// Obergrenze für den komprimierten Download im Speicher (darüber greift
 /// Gegendruck auf yt-dlp, z. B. bei stundenlangen Mixes).
-const SPOOL_CHUNKS: usize = 256 * 1024 * 1024 / CHUNK_SIZE;
+const SPOOL_LIMIT_BYTES: usize = 192 * 1024 * 1024;
 /// Bis hierhin muss yt-dlp die ersten Daten geliefert haben (ab Anfang).
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(30);
+/// Bei Wiederholungen großzügiger: YouTube verlangt bei den Standard-Clients
+/// teils ~30 s Wartezeit vor dem Download („Sleeping … as required by the site“).
+const STARTUP_TIMEOUT_RETRY: Duration = Duration::from_secs(90);
+/// YouTube-Clients für den ersten Versuch: liefern ohne Zwangspause (gemessen
+/// 5 s statt 35 s). Die Audioqualität (AAC) liegt über dem, was Discord
+/// ohnehin überträgt (64–96 kbit/s).
+const FAST_YOUTUBE_CLIENTS: &str = "youtube:player_client=tv_simply,mweb";
 /// Zusatzzeit pro Minute Startposition: Für einen Einstieg mitten im Track
 /// muss alles davor geladen und dekodiert werden (gemessen ~0,25 s/min).
 const STARTUP_PER_MINUTE: Duration = Duration::from_secs(2);
@@ -71,24 +82,30 @@ pub struct YtDlpSource {
     url: String,
     /// Startposition (für Seek und Fortsetzen nach Neustart).
     start_at: Duration,
+    /// 0 = erster Versuch (schnelle Clients), danach yt-dlp-Standard.
+    attempt: u8,
 }
 
 impl YtDlpSource {
-    pub fn input(url: impl Into<String>, start_at: Duration) -> Input {
+    pub fn input(url: impl Into<String>, start_at: Duration, attempt: u8) -> Input {
         Input::Lazy(Box::new(Self {
             url: url.into(),
             start_at,
+            attempt,
         }))
     }
 
-    fn spawn(&self) -> io::Result<(ChildStdout, ChildGuard)> {
+    fn spawn(&self) -> io::Result<(ChildStdout, ChildGuard, LastError)> {
         // Abgebrochene HLS-Downloads hinterlassen Fragmente im
         // Arbeitsverzeichnis – daher ein eigenes Temp-Verzeichnis.
         let workdir = fragment_dir();
         std::fs::create_dir_all(&workdir)?;
-        let mut ytdlp = Command::new("yt-dlp")
-            .current_dir(&workdir)
-            .args(crate::ytdlp_base_args())
+        let mut cmd = Command::new("yt-dlp");
+        cmd.current_dir(&workdir).args(crate::ytdlp_base_args());
+        if self.attempt == 0 {
+            cmd.args(["--extractor-args", FAST_YOUTUBE_CLIENTS]);
+        }
+        let mut ytdlp = cmd
             .args([
                 "--quiet",
                 "--no-playlist",
@@ -119,7 +136,8 @@ impl YtDlpSource {
             drop(ChildGuard(vec![ytdlp]));
             return Err(io::Error::other("yt-dlp-Pipes fehlen"));
         };
-        forward_stderr("yt-dlp", ytdlp_err);
+        let last_error = LastError::default();
+        forward_stderr("yt-dlp", ytdlp_err, Some(last_error.clone()));
 
         // `-ss` nach `-i`: ffmpeg dekodiert bis zur Position und verwirft
         // alles davor. Bei einer Pipe geht es nicht anders, ist aber dank
@@ -151,11 +169,11 @@ impl YtDlpSource {
             drop(ChildGuard(vec![ytdlp, ffmpeg]));
             return Err(io::Error::other("ffmpeg-Pipes fehlen"));
         };
-        forward_stderr("ffmpeg", stderr);
+        forward_stderr("ffmpeg", stderr, None);
 
         let guard = ChildGuard(vec![ytdlp, ffmpeg]);
         spool(ytdlp_out, stdin)?;
-        Ok((stdout, guard))
+        Ok((stdout, guard, last_error))
     }
 }
 
@@ -165,11 +183,25 @@ impl Compose for YtDlpSource {
     /// hier darf also bis zum Vorpuffern blockiert werden.
     fn create(&mut self) -> Result<AudioStream<Box<dyn MediaSource>>, AudioStreamError> {
         let fail = |e: io::Error| AudioStreamError::Fail(Box::new(e));
-        let (stdout, children) = self.spawn().map_err(fail)?;
+        let (stdout, children, last_error) = self.spawn().map_err(fail)?;
         let mut stream = BufferedStream::start(stdout, children).map_err(fail)?;
         let minutes = u32::try_from(self.start_at.as_secs() / 60).unwrap_or(u32::MAX);
-        let timeout = STARTUP_TIMEOUT.saturating_add(STARTUP_PER_MINUTE.saturating_mul(minutes));
-        stream.prebuffer(timeout).map_err(fail)?;
+        let base = if self.attempt == 0 {
+            STARTUP_TIMEOUT
+        } else {
+            STARTUP_TIMEOUT_RETRY
+        };
+        let timeout = base.saturating_add(STARTUP_PER_MINUTE.saturating_mul(minutes));
+        if let Err(e) = stream.prebuffer(timeout) {
+            // Die Fehlermeldung von yt-dlp kommt evtl. einen Moment später.
+            thread::sleep(Duration::from_millis(200));
+            let detail = last_error.lock().ok().and_then(|l| l.clone());
+            let e = match detail {
+                Some(detail) => io::Error::other(format!("{e} – {detail}")),
+                None => e,
+            };
+            return Err(fail(e));
+        }
 
         let raw = RawAdapter::new(ReadOnlySource::new(stream), SAMPLE_RATE, CHANNELS);
         Ok(AudioStream {
@@ -290,7 +322,10 @@ impl Read for BufferedStream {
 /// Leitet die Fehlerausgabe eines Hilfsprogramms ins Log. Echte Fehler von
 /// yt-dlp als Warnung, Wiederholungs-Meldungen und ffmpeg-Ausgaben (meist
 /// „Broken pipe“ nach Skip) nur auf Debug-Level.
-fn forward_stderr(program: &'static str, stderr: ChildStderr) {
+/// Letzte Fehlermeldung von yt-dlp (für aussagekräftige Fehler).
+type LastError = Arc<std::sync::Mutex<Option<String>>>;
+
+fn forward_stderr(program: &'static str, stderr: ChildStderr, last_error: Option<LastError>) {
     let spawned = thread::Builder::new()
         .name(format!("{program}-stderr"))
         .spawn(move || {
@@ -302,6 +337,11 @@ fn forward_stderr(program: &'static str, stderr: ChildStderr) {
                 }
                 if program == "yt-dlp" && line.starts_with("ERROR") {
                     warn!(program, "{line}");
+                    if let Some(slot) = &last_error
+                        && let Ok(mut slot) = slot.lock()
+                    {
+                        *slot = Some(line.trim_start_matches("ERROR:").trim().to_string());
+                    }
                 } else {
                     debug!(program, "{line}");
                 }
@@ -315,17 +355,29 @@ fn forward_stderr(program: &'static str, stderr: ChildStderr) {
 /// yt-dlp → Speicher → ffmpeg: Ein Thread lädt so schnell wie möglich in
 /// den Speicher, ein zweiter füttert ffmpeg im Tempo der Wiedergabe.
 fn spool(mut download: ChildStdout, mut ffmpeg_in: ChildStdin) -> io::Result<()> {
-    let (tx, rx) = flume::bounded::<Vec<u8>>(SPOOL_CHUNKS);
+    let (tx, rx) = flume::unbounded::<Vec<u8>>();
+    // Begrenzt wird nach Bytes, nicht nach Blöcken – Pipes liefern
+    // unterschiedlich große Stücke.
+    let queued = Arc::new(AtomicUsize::new(0));
+    let queued_feed = queued.clone();
     thread::Builder::new()
         .name("audio-download".into())
         .spawn(move || {
+            let mut buf = vec![0u8; CHUNK_SIZE];
             loop {
-                let mut chunk = vec![0u8; CHUNK_SIZE];
-                match download.read(&mut chunk) {
+                while queued.load(Ordering::Relaxed) > SPOOL_LIMIT_BYTES {
+                    thread::sleep(Duration::from_millis(50));
+                    if tx.is_disconnected() {
+                        return;
+                    }
+                }
+                match download.read(&mut buf) {
                     Ok(0) => return,
                     Ok(n) => {
-                        chunk.truncate(n);
-                        if tx.send(chunk).is_err() {
+                        // Exakt so groß wie gelesen, sonst würde jeder
+                        // kleine Lesevorgang einen ganzen Block belegen.
+                        queued.fetch_add(n, Ordering::Relaxed);
+                        if tx.send(buf[..n].to_vec()).is_err() {
                             return;
                         }
                     }
@@ -341,6 +393,7 @@ fn spool(mut download: ChildStdout, mut ffmpeg_in: ChildStdin) -> io::Result<()>
         .name("audio-feed".into())
         .spawn(move || {
             for chunk in rx.iter() {
+                queued_feed.fetch_sub(chunk.len(), Ordering::Relaxed);
                 if ffmpeg_in.write_all(&chunk).is_err() {
                     return;
                 }

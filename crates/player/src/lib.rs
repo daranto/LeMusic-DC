@@ -31,7 +31,8 @@ pub(crate) fn ytdlp_base_args() -> Vec<String> {
     args
 }
 
-/// Baut einen (lazy) Track ab Position `start_at`.
-pub fn build_track(meta: Arc<TrackMeta>, volume: f32, start_at: Duration) -> Track {
-    Track::new(YtDlpSource::input(meta.url.clone(), start_at)).volume(volume)
+/// Baut einen (lazy) Track ab Position `start_at`; `attempt` > 0 nutzt die
+/// langsameren, aber breiter funktionierenden yt-dlp-Standardeinstellungen.
+pub fn build_track(meta: Arc<TrackMeta>, volume: f32, start_at: Duration, attempt: u8) -> Track {
+    Track::new(YtDlpSource::input(meta.url.clone(), start_at, attempt)).volume(volume)
 }

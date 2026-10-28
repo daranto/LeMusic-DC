@@ -60,6 +60,16 @@ pub async fn build_client(config: &EnvConfig, deps: BotDeps) -> Result<serenity:
             commands: commands::all(),
             on_error: |err| Box::pin(on_error(err)),
             command_check: Some(|ctx| Box::pin(checks::channel_allowed(ctx))),
+            // Discord erwartet binnen 3 s eine Antwort. Ist ein Player gerade
+            // beschäftigt (Beitritt, Reconnect), dauert es länger – daher
+            // jeden Befehl sofort quittieren.
+            pre_command: |ctx| {
+                Box::pin(async move {
+                    if let Err(e) = ctx.defer().await {
+                        warn!(error = %e, "Befehl konnte nicht quittiert werden");
+                    }
+                })
+            },
             event_handler: |framework, event| {
                 Box::pin(events::on_event(event, framework.user_data))
             },
