@@ -38,6 +38,9 @@ use crate::{
 
 /// Zeit, die wir Discord für den Voice-Handshake geben.
 const JOIN_TIMEOUT: Duration = Duration::from_secs(15);
+/// Versuche für einen Beitritt (kurz nach dem Verlassen scheitert der erste
+/// gelegentlich).
+const JOIN_ATTEMPTS: u32 = 3;
 /// Wiederholungen eines fehlgeschlagenen Tracks, bevor er übersprungen wird.
 const MAX_RETRIES: u8 = 2;
 /// Bewegt sich die Position so lange nicht, gilt der Stream als hängend.
@@ -54,7 +57,8 @@ pub(crate) type Reply<T> = oneshot::Sender<Result<T>>;
 pub(crate) enum Msg {
     Enqueue(EnqueueRequest, Reply<EnqueueOutcome>),
     /// Sprachkanal betreten, ohne etwas abzuspielen (Sprachkanal, Textkanal).
-    Join(u64, Option<u64>, Reply<()>),
+    /// Antwort: Name der Autoplaylist, falls sie gestartet wurde.
+    Join(u64, Option<u64>, Reply<Option<String>>),
     Skip(Reply<Option<QueueEntry>>),
     SkipTo(usize, Reply<()>),
     Pause(Reply<()>),
@@ -328,10 +332,32 @@ impl Actor {
         }
 
         let guild = NonZeroU64::new(self.guild_id).ok_or_else(|| anyhow!("Ungültiger Server"))?;
-        let call = tokio::time::timeout(JOIN_TIMEOUT, self.shared.songbird.join(guild, channel_nz))
-            .await
-            .context("Zeitüberschreitung beim Betreten des Sprachkanals")?
-            .context("Sprachkanal konnte nicht betreten werden")?;
+        // Direkt nach dem Verlassen räumt songbird die alte Verbindung noch ab
+        // („request was cancelled/dropped“) – dann einmal kurz später erneut.
+        let mut attempt = 0;
+        let call = loop {
+            attempt += 1;
+            let result =
+                tokio::time::timeout(JOIN_TIMEOUT, self.shared.songbird.join(guild, channel_nz))
+                    .await
+                    .context("Zeitüberschreitung beim Betreten des Sprachkanals")
+                    .and_then(|r| r.context("Sprachkanal konnte nicht betreten werden"));
+            match result {
+                Ok(call) => break call,
+                Err(e) if attempt < JOIN_ATTEMPTS => {
+                    // Discord führt den Bot nach schnellem Verlassen/Beitreten
+                    // evtl. noch im Kanal – ein erneuter Beitritt wäre für
+                    // Discord keine Änderung und bliebe unbeantwortet. Daher
+                    // erst ausdrücklich abmelden.
+                    warn!(error = %e, attempt, "Beitritt fehlgeschlagen – melde ab und versuche erneut");
+                    if let Err(e) = self.shared.songbird.leave(guild).await {
+                        debug!(error = %e, "Abmelden fehlgeschlagen");
+                    }
+                    tokio::time::sleep(Duration::from_millis(1500)).await;
+                }
+                Err(e) => return Err(e),
+            }
+        };
 
         {
             let mut handler = call.lock().await;
@@ -361,16 +387,20 @@ impl Actor {
             // (Shutdown), bleibt der Track in `queue`-Form im gespeicherten
             // Zustand erhalten.
         }
-        if let Some(call) = self.call.take() {
+        // Nur verlassen, das Call-Objekt aber behalten: songbird nutzt es beim
+        // nächsten Beitritt wieder. Ein `remove()` direkt vor einem neuen
+        // Beitritt ließ diesen sonst dauerhaft ins Leere laufen.
+        let call = self
+            .call
+            .take()
+            .or_else(|| NonZeroU64::new(self.guild_id).and_then(|g| self.shared.songbird.get(g)));
+        if let Some(call) = call {
             let mut handler = call.lock().await;
             handler.remove_all_global_events();
             handler.stop();
             if let Err(e) = handler.leave().await {
                 debug!(error = %e, "Verlassen des Sprachkanals fehlgeschlagen");
             }
-        }
-        if let Some(guild) = NonZeroU64::new(self.guild_id) {
-            let _ = self.shared.songbird.remove(guild).await;
         }
     }
 
@@ -471,16 +501,23 @@ impl Actor {
     }
 
     /// Betritt einen Sprachkanal (bzw. wechselt ihn, solange nichts läuft).
-    /// Ohne Wiedergabe greift danach das Inaktivitäts-Timeout.
-    async fn join(&mut self, channel: u64, text_channel: Option<u64>) -> Result<()> {
+    /// Läuft nichts, startet die Autoplaylist; gibt es keine, greift das
+    /// Inaktivitäts-Timeout.
+    async fn join(&mut self, channel: u64, text_channel: Option<u64>) -> Result<Option<String>> {
         self.ensure_joined(channel).await?;
         if text_channel.is_some() {
             self.text_channel = text_channel;
         }
-        if self.current.is_none() {
-            self.idle_since = Some(Instant::now());
+        if self.current.is_some() {
+            return Ok(None);
         }
-        Ok(())
+        self.idle_since = Some(Instant::now());
+        if self.queue.is_empty() {
+            Ok(self.start_autoplaylist(false).await)
+        } else {
+            self.advance(false).await;
+            Ok(None)
+        }
     }
 
     fn new_entry(&mut self, meta: TrackMeta, requester: u64) -> QueueEntry {
@@ -648,7 +685,7 @@ impl Actor {
 
         self.dirty = true;
         self.idle_since = Some(Instant::now());
-        if self.start_autoplaylist().await {
+        if self.start_autoplaylist(true).await.is_some() {
             return;
         }
         self.emit(PlayerEvent::QueueFinished {
@@ -657,29 +694,28 @@ impl Actor {
         });
     }
 
-    async fn start_autoplaylist(&mut self) -> bool {
-        let Some(channel) = self.voice_channel else {
-            return false;
-        };
-        if self.listeners(channel) == Some(0) {
-            return false;
+    /// Startet die Autoplaylist (gemischt); liefert ihren Namen, wenn sie läuft.
+    /// `require_listeners`: nur starten, wenn jemand im Kanal ist (beim
+    /// automatischen Weiterspielen; bei ausdrücklichem Beitritt nicht).
+    async fn start_autoplaylist(&mut self, require_listeners: bool) -> Option<String> {
+        let channel = self.voice_channel?;
+        if require_listeners && self.listeners(channel) == Some(0) {
+            return None;
         }
         let settings = match GuildSettings::load(&self.shared.db, self.guild_id).await {
             Ok(s) => s,
             Err(e) => {
                 warn!(error = %e, "Server-Einstellungen nicht lesbar");
-                return false;
+                return None;
             }
         };
-        let Some(name) = settings.autoplaylist else {
-            return false;
-        };
+        let name = settings.autoplaylist?;
         let mut tracks = match self.shared.db.playlist_get(&name).await {
             Ok(Some(t)) if !t.is_empty() => t,
-            Ok(_) => return false,
+            Ok(_) => return None,
             Err(e) => {
                 warn!(error = %e, "Autoplaylist nicht lesbar");
-                return false;
+                return None;
             }
         };
         fastrand::shuffle(&mut tracks);
@@ -688,10 +724,11 @@ impl Actor {
             let entry = self.new_entry(meta, 0);
             self.queue.push_back(entry);
         }
-        let Some(next) = self.queue.pop_front() else {
-            return false;
-        };
-        self.start(next, Duration::ZERO, 0, true).await.is_ok()
+        let next = self.queue.pop_front()?;
+        self.start(next, Duration::ZERO, 0, true)
+            .await
+            .ok()
+            .map(|()| name)
     }
 
     async fn skip_current(&mut self) -> Result<()> {

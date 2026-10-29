@@ -238,12 +238,12 @@ pub(crate) async fn join(
 ) -> ApiResult {
     let channel = parse_channel(form.voice_channel.as_deref())?
         .ok_or_else(|| ApiError::bad_request("Bitte einen Sprachkanal auswählen"))?;
-    state
+    let autoplaylist = state
         .players
         .player(state.guild_id)
         .join(channel, None)
         .await?;
-    ok()
+    Ok(Json(json!({ "ok": true, "autoplaylist": autoplaylist })))
 }
 
 #[derive(Deserialize, Default)]

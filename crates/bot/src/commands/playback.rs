@@ -202,28 +202,37 @@ pub async fn search(
     enqueue_and_reply(ctx, vec![chosen], false).await
 }
 
-/// Holt den Bot in deinen Sprachkanal, ohne etwas abzuspielen.
+/// Holt den Bot in deinen Sprachkanal (startet ggf. die Autoplaylist).
 #[poise::command(slash_command, guild_only, aliases("summon"))]
 pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
     let settings = guild_settings(ctx).await?;
     let channel = checks::target_voice_channel(ctx, &settings)?;
-    checks::player(ctx)?
+    let autoplaylist = checks::player(ctx)?
         .join(channel, Some(ctx.channel_id().get()))
         .await?;
-    let timeout = ctx.data().settings.current().idle_timeout_secs;
-    let hint = if timeout > 0 {
-        format!(
-            "\nOhne Wiedergabe gehe ich nach {} wieder.",
-            format_duration(Duration::from_secs(timeout))
-        )
-    } else {
-        String::new()
+    let text = match autoplaylist {
+        Some(name) => format!(
+            "👋 Bin da in {} und spiele die Autoplaylist **{name}**.",
+            embeds::mention_channel(channel)
+        ),
+        None => {
+            let timeout = ctx.data().settings.current().idle_timeout_secs;
+            let hint = if timeout > 0 {
+                format!(
+                    "\nOhne Wiedergabe gehe ich nach {} wieder.",
+                    format_duration(Duration::from_secs(timeout))
+                )
+            } else {
+                String::new()
+            };
+            format!(
+                "👋 Bin da in {} – mit `/play` geht's los.{hint}",
+                embeds::mention_channel(channel)
+            )
+        }
     };
-    ctx.send(CreateReply::default().embed(embeds::success(&format!(
-        "👋 Bin da in {} – mit `/play` geht's los.{hint}",
-        embeds::mention_channel(channel)
-    ))))
-    .await?;
+    ctx.send(CreateReply::default().embed(embeds::success(&text)))
+        .await?;
     Ok(())
 }
 

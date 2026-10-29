@@ -180,8 +180,13 @@ impl Player {
     pub async fn enqueue(&self, req: EnqueueRequest) -> Result<EnqueueOutcome> {
         self.request(|r| Msg::Enqueue(req, r)).await
     }
-    /// Betritt einen Sprachkanal, ohne etwas abzuspielen.
-    pub async fn join(&self, voice_channel: u64, text_channel: Option<u64>) -> Result<()> {
+    /// Betritt einen Sprachkanal. Läuft nichts, startet die Autoplaylist –
+    /// deren Name wird zurückgegeben.
+    pub async fn join(
+        &self,
+        voice_channel: u64,
+        text_channel: Option<u64>,
+    ) -> Result<Option<String>> {
         self.request(|r| Msg::Join(voice_channel, text_channel, r))
             .await
     }

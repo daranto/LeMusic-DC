@@ -344,7 +344,8 @@ $("#play-form").addEventListener("submit", async (ev) => {
 $("#btn-join").addEventListener("click", (ev) => {
   const voice_channel = $("#voice-select").value;
   if (!voice_channel) return toast("Bitte einen Sprachkanal auswählen", "error");
-  run(ev.currentTarget, () => api("POST", "/player/join", { voice_channel }), "Beigetreten").then(refreshPlayer);
+  run(ev.currentTarget, () => api("POST", "/player/join", { voice_channel }), (r) =>
+    r.autoplaylist ? `Beigetreten – spiele Autoplaylist „${r.autoplaylist}“` : "Beigetreten").then(refreshPlayer);
 });
 
 // ---------------------------------------------------------------------------
