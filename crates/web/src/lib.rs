@@ -126,7 +126,7 @@ pub(crate) struct HealthReport {
     status: &'static str,
     discord: bool,
     database: bool,
-    version: &'static str,
+    version: String,
 }
 
 pub(crate) async fn health_report(state: &WebState) -> (bool, HealthReport) {
@@ -141,7 +141,7 @@ pub(crate) async fn health_report(state: &WebState) -> (bool, HealthReport) {
             status: if ok { "ok" } else { "degraded" },
             discord,
             database,
-            version: env!("CARGO_PKG_VERSION"),
+            version: lemusic_core::config::version_string(),
         },
     )
 }

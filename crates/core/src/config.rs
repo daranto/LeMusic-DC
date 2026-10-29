@@ -72,6 +72,13 @@ impl EnvConfig {
     }
 }
 
+/// Version inkl. Commit-Stand, z. B. `0.1.0 (8d131f9)`.
+pub fn version_string() -> String {
+    let revision = env::var("LEMUSIC_REVISION").unwrap_or_else(|_| "dev".into());
+    let short: String = revision.chars().take(7).collect();
+    format!("{} ({short})", env!("CARGO_PKG_VERSION"))
+}
+
 /// Datenverzeichnis (`DATA_DIR`, Standard `/data`).
 pub fn data_dir() -> PathBuf {
     env::var("DATA_DIR")

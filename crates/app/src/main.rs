@@ -65,7 +65,7 @@ async fn main() -> Result<()> {
 async fn run(logs: LogBuffer) -> Result<()> {
     let config = EnvConfig::from_env()?;
     info!(
-        version = env!("CARGO_PKG_VERSION"),
+        version = %lemusic_core::config::version_string(),
         ?config,
         "Starte LeMusic"
     );
