@@ -13,7 +13,7 @@ use axum::{
     Json, Router,
     extract::State,
     http::StatusCode,
-    response::IntoResponse,
+    response::{IntoResponse, Redirect, Response},
     routing::{get, post, put},
 };
 use lemusic_core::{Db, GuildDirectory, Health, LogBuffer, SettingsStore};
@@ -106,7 +106,7 @@ pub fn router(state: WebState) -> Router {
 
     Router::new()
         .route("/health", get(health))
-        .route("/", get(assets::index))
+        .route("/", get(root))
         .route("/app.js", get(assets::app_js))
         .route("/style.css", get(assets::style_css))
         .route("/dnd.js", get(assets::dnd_js))
@@ -118,6 +118,40 @@ pub fn router(state: WebState) -> Router {
         .nest("/public/api", public_api)
         .nest("/api", api)
         .with_state(state)
+}
+
+/// Startseite: Über die öffentliche Adresse (z. B. Cloudflare Tunnel) direkt
+/// zum öffentlichen Dashboard, intern zur Admin-Oberfläche.
+async fn root(State(state): State<WebState>, headers: axum::http::HeaderMap) -> Response {
+    let settings = state.settings.current();
+    let request_host = headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get(axum::http::header::HOST))
+        .and_then(|h| h.to_str().ok())
+        .map(host_only);
+    let public_host = settings
+        .public_url
+        .split("://")
+        .nth(1)
+        .map(host_only)
+        .filter(|h| !h.is_empty());
+    if settings.public_enabled && request_host.is_some() && request_host == public_host {
+        return Redirect::temporary("/public").into_response();
+    }
+    assets::index().await.into_response()
+}
+
+/// `Example.org:8080/pfad` → `example.org`
+fn host_only(value: &str) -> String {
+    value
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .to_ascii_lowercase()
 }
 
 /// Startet den Server und läuft, bis `shutdown` fertig ist.
@@ -172,4 +206,19 @@ async fn health(State(state): State<WebState>) -> impl IntoResponse {
         StatusCode::SERVICE_UNAVAILABLE
     };
     (code, Json(report))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::host_only;
+
+    #[test]
+    fn host_only_strips_port_path_and_case() {
+        assert_eq!(
+            host_only("Le-Music.xn--gnn-sna.eu"),
+            "le-music.xn--gnn-sna.eu"
+        );
+        assert_eq!(host_only("192.168.66.48:8080"), "192.168.66.48");
+        assert_eq!(host_only("example.org/public?x=1"), "example.org");
+    }
 }

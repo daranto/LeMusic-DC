@@ -90,7 +90,7 @@ Unter **`/public`** können alle, die den Link kennen, Songs wünschen: YouTube-
 
 Schutz: nur YouTube-/SoundCloud-Links, höchstens 10 Links pro Wunsch und 30 pro Minute, Playlists werden auf 200 Titel gekürzt; Steuerung (Skip, Stop …) bleibt dem Admin vorbehalten. Damit andere Geräte das Dashboard erreichen, in `docker-compose.yml` den Port ohne `127.0.0.1:` freigeben (bzw. in UnRaid den Port mappen).
 
-**Über das Internet (Reverse Proxy, Cloudflare Tunnel):** Alles, was das öffentliche Dashboard braucht (Seite, Styles, Skripte, Gast-API), liegt unter `/public/…`. Es reicht also, nur den Pfad `/public` freizugeben – die Admin-Oberfläche bleibt intern. Beispiel Cloudflare Tunnel: Path `/public`, Service `http://<IP>:8080`. Als „Öffentliche Adresse“ dann `https://<deine-domain>` eintragen (Umlaut-Domains in Punycode, z. B. `https://le-music.xn--gnn-sna.eu`).
+**Über das Internet (Reverse Proxy, Cloudflare Tunnel):** Alles, was das öffentliche Dashboard braucht (Seite, Styles, Skripte, Gast-API), liegt unter `/public/…`. Es reicht also, nur `/public` freizugeben – die Admin-Oberfläche bleibt intern. Wird die Startseite `/` über die eingetragene „Öffentliche Adresse“ aufgerufen, leitet der Bot direkt zum Dashboard weiter (intern über die IP erscheint weiter die Admin-Seite). Beispiel Cloudflare Tunnel: Path `^/(public.*)?$` (lässt `/` und `/public…` durch, blockt alles andere), Service `http://<IP>:8080`. Als „Öffentliche Adresse“ dann `https://<deine-domain>` eintragen (Umlaut-Domains in Punycode, z. B. `https://le-music.xn--gnn-sna.eu`).
 
 ## Betrieb
 
