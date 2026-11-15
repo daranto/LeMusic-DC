@@ -53,6 +53,7 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 | `/search <Suche> [soundcloud]` | 5 Treffer zur Auswahl | alle |
 | `/join` | Bot in deinen Sprachkanal holen, ohne etwas abzuspielen | alle |
 | `/leave` | Kanal verlassen, Warteschlange leeren | DJ |
+| `/dashboard` | Postet den Link zum öffentlichen Dashboard | alle |
 | `/skip` | Überspringen – direkt für DJ und Wünschenden, sonst Abstimmung | alle |
 | `/forceskip`, `/skipto <Pos>` | Sofort überspringen / springen | DJ |
 | `/pause`, `/resume`, `/stop` | Pause, weiter, stoppen & Kanal verlassen | DJ |
@@ -76,6 +77,18 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 - **Logs** live, **Konto** (Passwort ändern)
 
 Änderungen wirken sofort, ohne Neustart.
+
+**Drag & Drop:** YouTube-/SoundCloud-Links (aus einem Browser-Tab, der Adressleiste oder markiertem Text) lassen sich auf „Hinzufügen“ bzw. die Warteschlange (→ einreihen), auf eine Playlist in der Liste, die geöffnete Playlist oder „Neue Playlist“ ziehen.
+
+## Öffentliches Dashboard
+
+Unter **`/public`** können alle, die den Link kennen, Songs wünschen: YouTube- oder SoundCloud-Links hineinziehen oder einfügen und sehen, was gerade läuft. Einrichtung unter **Einstellungen → Bot**:
+
+- **Aktiv** schaltet es ein (Standard: aus).
+- **PIN** (optional, 4 Ziffern) – Gäste müssen sie einmal eingeben (gilt 12 h). Ändert sich die PIN, sind alle Gäste abgemeldet. Nach 5 falschen Versuchen kurze Sperre.
+- **Öffentliche Adresse**, z. B. `http://192.168.1.10:8080` – damit postet der Bot mit `/dashboard` den Link und hängt an jede „Spiele jetzt“-Ansage einen Knopf **🎵 Song hinzufügen**. Die PIN wird nie gepostet.
+
+Schutz: nur YouTube-/SoundCloud-Links, höchstens 10 Links pro Wunsch und 30 pro Minute, Playlists werden auf 200 Titel gekürzt; Steuerung (Skip, Stop …) bleibt dem Admin vorbehalten. Damit andere Geräte das Dashboard erreichen, in `docker-compose.yml` den Port ohne `127.0.0.1:` freigeben (bzw. in UnRaid den Port mappen).
 
 ## Betrieb
 

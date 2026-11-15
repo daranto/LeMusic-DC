@@ -4,6 +4,7 @@ mod api;
 mod assets;
 mod auth;
 mod dto;
+mod public;
 
 use std::{future::Future, net::SocketAddr, sync::Arc, time::Instant};
 
@@ -31,6 +32,7 @@ pub struct WebState {
     pub guild_id: u64,
     pub started: Instant,
     pub(crate) limiter: Arc<auth::LoginLimiter>,
+    pub(crate) public: Arc<public::PublicState>,
 }
 
 impl WebState {
@@ -53,6 +55,7 @@ impl WebState {
             guild_id,
             started: Instant::now(),
             limiter: Arc::default(),
+            public: Arc::default(),
         }
     }
 }
@@ -91,13 +94,21 @@ pub fn router(state: WebState) -> Router {
         .route(
             "/system/cookies",
             put(api::put_cookies).delete(api::delete_cookies),
-        );
+        )
+        // Öffentliches Dashboard (eigene Gast-Sitzung, optional PIN).
+        .route("/public/status", get(public::status))
+        .route("/public/unlock", post(public::unlock))
+        .route("/public/player", get(public::player))
+        .route("/public/add", post(public::add));
 
     Router::new()
         .route("/health", get(health))
         .route("/", get(assets::index))
         .route("/app.js", get(assets::app_js))
         .route("/style.css", get(assets::style_css))
+        .route("/dnd.js", get(assets::dnd_js))
+        .route("/public", get(assets::public_index))
+        .route("/public.js", get(assets::public_js))
         .nest("/api", api)
         .with_state(state)
 }

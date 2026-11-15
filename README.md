@@ -13,6 +13,7 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
 - Selbstheilend: Retry ab letzter Position, Reconnect, abgestürzte Player starten neu
 - Neustart-fest: Warteschlange und Position überleben Neustarts und Updates
 - Weboberfläche mit Admin-Login: Wiedergabe, Playlists, Einstellungen, Logs, yt-dlp-Update
+- Öffentliches Dashboard (optional mit PIN): Songs per Drag & Drop von YouTube/SoundCloud wünschen
 - Discords Ende-zu-Ende-Verschlüsselung (DAVE) wird unterstützt
 
 **Schnellstart**
@@ -41,6 +42,7 @@ A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust
 - Self-healing: retries from the last position, voice reconnect, crashed players restart
 - Restart-proof: queue and position survive restarts and updates
 - Web UI with admin login: playback, playlists, settings, logs, one-click yt-dlp update
+- Public dashboard (optional PIN): request songs by dragging YouTube/SoundCloud links into the browser
 - Supports Discord's end-to-end voice encryption (DAVE)
 
 **Quick start**

@@ -348,9 +348,58 @@ $("#btn-join").addEventListener("click", (ev) => {
     r.autoplaylist ? `Beigetreten – spiele Autoplaylist „${r.autoplaylist}“` : "Beigetreten").then(refreshPlayer);
 });
 
+// Drag & Drop: Links auf „Hinzufügen“ oder die Warteschlange ziehen.
+const noLinkToast = () => toast("Das war kein YouTube- oder SoundCloud-Link", "error");
+
+async function enqueueLinks(links) {
+  const voice_channel = $("#voice-select").value || undefined;
+  let added = 0;
+  for (const query of links) {
+    const r = await run(null, () => api("POST", "/player/play", { query, voice_channel }));
+    if (r) added += r.added;
+  }
+  if (added) toast(added === 1 ? "1 Titel eingereiht" : `${added} Titel eingereiht`, "ok");
+  refreshPlayer();
+}
+LeMusicDnD.attach($("#play-form"), enqueueLinks, noLinkToast);
+LeMusicDnD.attach($("#queue-card"), enqueueLinks, noLinkToast);
+
 // ---------------------------------------------------------------------------
 // Playlists
 // ---------------------------------------------------------------------------
+
+async function addLinksToPlaylist(name, links) {
+  let added = 0;
+  let total = null;
+  for (const query of links) {
+    const r = await run(null, () => api("POST", `/playlists/${encodeURIComponent(name)}/add`, { query }));
+    if (r) {
+      added += r.added;
+      total = r.total;
+    }
+  }
+  if (added) toast(`${added} Titel zu „${name}“ hinzugefügt (jetzt ${total})`, "ok");
+  await loadPlaylists();
+  if (state.playlist === name) showPlaylist(name);
+}
+
+LeMusicDnD.attach($("#playlist-detail"), (links) => {
+  if (!state.playlist) return toast("Bitte zuerst eine Playlist auswählen – oder auf „Neue Playlist“ ziehen", "error");
+  addLinksToPlaylist(state.playlist, links);
+}, noLinkToast);
+
+LeMusicDnD.attach($("#playlist-create"), async (links) => {
+  const form = $("#playlist-create");
+  const name = form.elements.name.value.trim();
+  if (!name) {
+    form.elements.query.value = links[0];
+    form.elements.name.focus();
+    return toast(links.length > 1 ? "Namen eingeben – mehrere Links: bitte auf eine bestehende Playlist ziehen" : "Jetzt noch einen Namen eingeben", "");
+  }
+  await addLinksToPlaylist(name, links);
+  form.reset();
+  showPlaylist(name);
+}, noLinkToast);
 
 async function loadPlaylists() {
   const lists = await run(null, () => api("GET", "/playlists"));
@@ -362,6 +411,9 @@ async function loadPlaylists() {
           <div class="meta"><a>${esc(p.name)}</a><small>${p.track_count} Tracks</small></div>
         </li>`).join("")
     : `<li class="empty">Noch keine Playlists.</li>`;
+  // Links direkt auf eine Playlist in der Liste ziehen.
+  $$("#playlist-list li[data-name]").forEach((li) =>
+    LeMusicDnD.attach(li, (links) => addLinksToPlaylist(li.dataset.name, links), noLinkToast));
   if (state.playlist && !lists.some((p) => p.name === state.playlist)) {
     state.playlist = null;
     $("#playlist-detail").innerHTML = `<p class="muted">Playlist auswählen.</p>`;
@@ -466,6 +518,10 @@ async function loadSettings() {
     f.default_volume.value = bot.default_volume;
     f.idle_timeout_secs.value = bot.idle_timeout_secs;
     f.pause_when_alone.checked = bot.pause_when_alone;
+    f.public_enabled.checked = bot.public_enabled;
+    f.public_pin.value = bot.public_pin;
+    f.public_url.value = bot.public_url;
+    updatePublicNote();
   }
   if (guild) {
     const f = $("#guild-settings");
@@ -486,6 +542,26 @@ async function loadSettings() {
     f.announce_tracks.checked = guild.announce_tracks;
   }
 }
+
+function updatePublicNote() {
+  const f = $("#bot-settings");
+  const base = (f.public_url.value.trim() || location.origin).replace(/\/+$/, "");
+  const note = $("#public-link-note");
+  note.replaceChildren();
+  if (!f.public_enabled.checked) {
+    note.textContent = "Deaktiviert.";
+    return;
+  }
+  const a = document.createElement("a");
+  a.href = `${base}/public`;
+  a.target = "_blank";
+  a.rel = "noopener";
+  a.textContent = `${base}/public`;
+  note.append("Link: ", a);
+  if (!f.public_url.value.trim()) note.append(" – ohne öffentliche Adresse postet der Bot keine Links in Discord.");
+}
+["public_enabled", "public_url"].forEach((n) =>
+  $(`#bot-settings [name=${n}]`).addEventListener("input", updatePublicNote));
 
 $("#bot-settings").addEventListener("submit", (ev) => {
   ev.preventDefault();

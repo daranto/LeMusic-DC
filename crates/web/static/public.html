@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
+  <meta name="robots" content="noindex">
+  <title>LeMusic – Musik wünschen</title>
+  <link rel="stylesheet" href="/style.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%238b5cf6'/%3E%3Cpath d='M13 22a3 3 0 1 1-2-2.83V9l10-2v11a3 3 0 1 1-2-2.83V10.5l-6 1.2V22z' fill='white'/%3E%3C/svg%3E">
+</head>
+<body class="public">
+  <!-- Deaktiviert -->
+  <main id="disabled-view" class="login" hidden>
+    <div class="card login-card">
+      <div class="brand brand-lg"><span class="logo">♪</span> LeMusic</div>
+      <p class="muted">Das öffentliche Dashboard ist gerade nicht aktiviert.</p>
+    </div>
+  </main>
+
+  <!-- PIN -->
+  <main id="pin-view" class="login" hidden>
+    <form id="pin-form" class="card login-card">
+      <div class="brand brand-lg"><span class="logo">♪</span> LeMusic</div>
+      <p class="muted">Bitte die 4-stellige PIN eingeben.</p>
+      <input name="pin" class="pin-input" inputmode="numeric" pattern="[0-9]{4}" maxlength="4"
+             autocomplete="one-time-code" placeholder="••••" required aria-label="PIN">
+      <button class="btn primary" type="submit">Weiter</button>
+      <p id="pin-error" class="error" role="alert"></p>
+    </form>
+  </main>
+
+  <!-- Dashboard -->
+  <div id="main-view" hidden>
+    <header class="topbar">
+      <div class="brand"><span class="logo">♪</span> LeMusic <span class="muted" id="guild-name"></span></div>
+    </header>
+    <div class="content">
+      <section class="card drop-zone" id="drop-zone">
+        <div class="drop-hint">
+          <div class="drop-icon">⤓</div>
+          <h2>YouTube- oder SoundCloud-Link hierher ziehen</h2>
+          <p class="muted">… oder einfügen. Auch Playlists (bis 200 Titel).</p>
+        </div>
+        <form id="add-form" class="row">
+          <input name="link" placeholder="https://www.youtube.com/watch?v=…" aria-label="Link">
+          <button class="btn primary" type="submit">Hinzufügen</button>
+        </form>
+        <label id="voice-row" hidden>Sprachkanal (der Bot ist gerade nicht verbunden)
+          <select id="voice-select"></select>
+        </label>
+      </section>
+
+      <div class="card now">
+        <div class="now-cover" id="now-cover"></div>
+        <div class="now-body">
+          <div class="eyebrow" id="now-state">Nichts läuft</div>
+          <a class="now-title" id="now-title" target="_blank" rel="noopener"></a>
+          <div class="muted" id="now-author"></div>
+          <div class="progress"><div class="progress-fill" id="now-progress"></div></div>
+          <div class="progress-times"><span id="now-pos">0:00</span><span id="now-len">0:00</span></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Als Nächstes <span class="muted" id="queue-meta"></span></h2>
+        <ol class="queue" id="queue"></ol>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <script src="/dnd.js"></script>
+  <script src="/public.js"></script>
+</body>
+</html>

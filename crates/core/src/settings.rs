@@ -25,6 +25,13 @@ pub struct BotSettings {
     pub idle_timeout_secs: u64,
     /// Automatisch pausieren, wenn niemand mehr im Sprachkanal ist.
     pub pause_when_alone: bool,
+    /// Öffentliches Dashboard (`/public`) zum Hinzufügen von Links aktiv.
+    pub public_enabled: bool,
+    /// Optionale 4-stellige PIN für das öffentliche Dashboard (leer = keine).
+    pub public_pin: String,
+    /// Adresse, unter der die Weboberfläche von außen erreichbar ist (z. B.
+    /// `http://192.168.1.10:8080`). Für Links in Discord; leer = keine Links.
+    pub public_url: String,
 }
 
 impl Default for BotSettings {
@@ -34,6 +41,9 @@ impl Default for BotSettings {
             default_volume: 100,
             idle_timeout_secs: 300,
             pause_when_alone: true,
+            public_enabled: false,
+            public_pin: String::new(),
+            public_url: String::new(),
         }
     }
 }
@@ -46,6 +56,15 @@ impl BotSettings {
         if self.default_volume > Self::MAX_VOLUME {
             bail!("Lautstärke muss zwischen 0 und {} liegen", Self::MAX_VOLUME);
         }
+        if !self.public_pin.is_empty()
+            && !(self.public_pin.len() == 4 && self.public_pin.chars().all(|c| c.is_ascii_digit()))
+        {
+            bail!("Die PIN muss aus genau 4 Ziffern bestehen (oder leer sein)");
+        }
+        let url = self.public_url.trim();
+        if !url.is_empty() && !(url.starts_with("http://") || url.starts_with("https://")) {
+            bail!("Die öffentliche Adresse muss mit http:// oder https:// beginnen");
+        }
         if self.status_text.chars().count() > Self::MAX_STATUS_LEN {
             bail!(
                 "Status-Text darf höchstens {} Zeichen haben",
@@ -53,6 +72,12 @@ impl BotSettings {
             );
         }
         Ok(())
+    }
+
+    /// Link zum öffentlichen Dashboard, falls aktiviert und Adresse bekannt.
+    pub fn public_dashboard_link(&self) -> Option<String> {
+        let base = self.public_url.trim().trim_end_matches('/');
+        (self.public_enabled && !base.is_empty()).then(|| format!("{base}/public"))
     }
 
     /// Lautstärke als Faktor für songbird (1.0 = 100 %).
@@ -137,6 +162,19 @@ mod tests {
         assert!(store.update(invalid).await.is_err());
         assert_eq!(store.current(), BotSettings::default());
         Ok(())
+    }
+
+    #[test]
+    fn pin_must_be_four_digits() {
+        let with_pin = |pin: &str| BotSettings {
+            public_pin: pin.into(),
+            ..BotSettings::default()
+        };
+        assert!(with_pin("").validate().is_ok());
+        assert!(with_pin("0420").validate().is_ok());
+        assert!(with_pin("123").validate().is_err());
+        assert!(with_pin("12345").validate().is_err());
+        assert!(with_pin("12a4").validate().is_err());
     }
 
     #[test]

@@ -84,7 +84,12 @@ pub async fn build_client(config: &EnvConfig, deps: BotDeps) -> Result<serenity:
                 poise::builtins::register_in_guild(ctx, &framework.options().commands, guild_id)
                     .await?;
                 spawn_presence_updater(ctx.clone(), settings.clone());
-                events::spawn_player_event_forwarder(ctx.clone(), players.clone(), db.clone());
+                events::spawn_player_event_forwarder(
+                    ctx.clone(),
+                    players.clone(),
+                    db.clone(),
+                    settings.clone(),
+                );
                 Ok(Data {
                     settings,
                     health,

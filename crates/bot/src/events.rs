@@ -2,7 +2,7 @@
 
 use std::{collections::HashMap, sync::atomic::AtomicBool, sync::atomic::Ordering};
 
-use lemusic_core::{Db, GuildSettings};
+use lemusic_core::{Db, GuildSettings, SettingsStore};
 use lemusic_player::{PlayerEvent, PlayerManager};
 use poise::serenity_prelude::{self as serenity, CreateMessage};
 use tokio::sync::broadcast::error::RecvError;
@@ -35,7 +35,12 @@ pub async fn on_event(event: &serenity::FullEvent, data: &Data) -> Result<(), Er
 }
 
 /// Postet Player-Ereignisse („Spiele jetzt“, Fehler …) im Textkanal.
-pub fn spawn_player_event_forwarder(ctx: serenity::Context, players: PlayerManager, db: Db) {
+pub fn spawn_player_event_forwarder(
+    ctx: serenity::Context,
+    players: PlayerManager,
+    db: Db,
+    bot_settings: SettingsStore,
+) {
     let mut rx = players.subscribe();
     tokio::spawn(async move {
         // Letzte „Spiele jetzt“-Nachricht pro Server, um sie zu ersetzen.
@@ -117,7 +122,16 @@ pub fn spawn_player_event_forwarder(ctx: serenity::Context, players: PlayerManag
             };
             let channel = serenity::ChannelId::new(channel);
             match channel
-                .send_message(&ctx.http, CreateMessage::new().embed(embed))
+                .send_message(&ctx.http, {
+                    let mut message = CreateMessage::new().embed(embed);
+                    // „Song hinzufügen“-Knopf zum öffentlichen Dashboard.
+                    if is_announce
+                        && let Some(link) = bot_settings.current().public_dashboard_link()
+                    {
+                        message = message.components(vec![embeds::dashboard_button(&link)]);
+                    }
+                    message
+                })
                 .await
             {
                 Ok(msg) => {

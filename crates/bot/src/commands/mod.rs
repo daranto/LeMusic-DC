@@ -12,6 +12,7 @@ pub fn all() -> Vec<poise::Command<Data, Error>> {
         playback::search(),
         playback::join(),
         playback::leave(),
+        playback::dashboard(),
         playback::skip(),
         playback::forceskip(),
         playback::pause(),

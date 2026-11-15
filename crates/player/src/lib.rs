@@ -18,7 +18,7 @@ pub use model::{
     EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEntry, RepeatMode, Snapshot,
     VoicePresence,
 };
-pub use resolve::{MAX_PLAYLIST_TRACKS, SearchSource, is_url, resolve, search};
+pub use resolve::{MAX_PLAYLIST_TRACKS, SearchSource, is_supported_link, is_url, resolve, search};
 pub use source::YtDlpSource;
 
 /// Gemeinsame yt-dlp-Argumente (z. B. Cookies, falls hinterlegt).

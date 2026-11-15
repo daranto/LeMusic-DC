@@ -4,7 +4,9 @@ use std::time::Duration;
 
 use lemusic_core::format_duration;
 use lemusic_player::{QueueEntry, Snapshot};
-use poise::serenity_prelude::{self as serenity, CreateEmbed, CreateEmbedFooter};
+use poise::serenity_prelude::{
+    self as serenity, CreateActionRow, CreateButton, CreateEmbed, CreateEmbedFooter,
+};
 
 pub const COLOR_MAIN: u32 = 0x8b5cf6;
 pub const COLOR_OK: u32 = 0x22c55e;
@@ -163,4 +165,11 @@ pub fn queue_page(snapshot: &Snapshot, page: usize) -> CreateEmbed {
 
 pub fn mention_channel(id: u64) -> String {
     format!("<#{}>", serenity::ChannelId::new(id))
+}
+
+/// Link-Knopf zum öffentlichen Dashboard.
+pub fn dashboard_button(link: &str) -> CreateActionRow {
+    CreateActionRow::Buttons(vec![
+        CreateButton::new_link(link).label("🎵 Song hinzufügen"),
+    ])
 }

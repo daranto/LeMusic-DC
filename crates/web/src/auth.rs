@@ -32,7 +32,7 @@ pub(crate) struct LoginLimiter {
 }
 
 impl LoginLimiter {
-    fn locked_for(&self) -> Option<Duration> {
+    pub(crate) fn locked_for(&self) -> Option<Duration> {
         let mut failures = self.failures.lock().ok()?;
         failures.retain(|t| t.elapsed() < FAILURE_WINDOW);
         if failures.len() < MAX_FAILURES {
@@ -42,13 +42,13 @@ impl LoginLimiter {
         LOCKOUT.checked_sub(last.elapsed())
     }
 
-    fn record_failure(&self) {
+    pub(crate) fn record_failure(&self) {
         if let Ok(mut failures) = self.failures.lock() {
             failures.push(Instant::now());
         }
     }
 
-    fn reset(&self) {
+    pub(crate) fn reset(&self) {
         if let Ok(mut failures) = self.failures.lock() {
             failures.clear();
         }
@@ -56,26 +56,39 @@ impl LoginLimiter {
 }
 
 fn session_token(headers: &HeaderMap) -> Option<String> {
+    cookie_value(headers, COOKIE)
+}
+
+/// Wert eines Cookies aus dem Request.
+pub(crate) fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
     headers
         .get_all(header::COOKIE)
         .iter()
         .filter_map(|v| v.to_str().ok())
         .flat_map(|v| v.split(';'))
         .filter_map(|pair| pair.trim().split_once('='))
-        .find(|(k, _)| *k == COOKIE)
+        .find(|(k, _)| *k == name)
         .map(|(_, v)| v.to_string())
         .filter(|v| !v.is_empty())
 }
 
 fn cookie_header(token: &str, max_age: u64) -> HeaderValue {
+    named_cookie_header(COOKIE, token, max_age)
+}
+
+pub(crate) fn named_cookie_header(name: &str, token: &str, max_age: u64) -> HeaderValue {
     HeaderValue::from_str(&format!(
-        "{COOKIE}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age}"
+        "{name}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age}"
     ))
     .unwrap_or_else(|_| HeaderValue::from_static(""))
 }
 
-fn has_csrf_header(parts: &Parts) -> bool {
+pub(crate) fn has_csrf_header(parts: &Parts) -> bool {
     parts.headers.get(CSRF_HEADER).is_some()
+}
+
+pub(crate) fn has_csrf(headers: &HeaderMap) -> bool {
+    headers.get(CSRF_HEADER).is_some()
 }
 
 /// Extraktor: Anfrage stammt vom angemeldeten Admin.

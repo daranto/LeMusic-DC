@@ -64,7 +64,8 @@ fn token_hash(token: &str) -> String {
     digest.iter().map(|b| format!("{b:02x}")).collect()
 }
 
-fn random_token(bytes: usize) -> String {
+/// Kryptografisch zufälliges Token (hex).
+pub fn random_token(bytes: usize) -> String {
     let mut buf = vec![0u8; bytes];
     OsRng.fill_bytes(&mut buf);
     buf.iter().map(|b| format!("{b:02x}")).collect()

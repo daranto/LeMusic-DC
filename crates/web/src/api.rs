@@ -86,7 +86,7 @@ fn ok() -> ApiResult {
     Ok(Json(json!({ "ok": true })))
 }
 
-fn parse_channel(id: Option<&str>) -> Result<Option<u64>, ApiError> {
+pub(crate) fn parse_channel(id: Option<&str>) -> Result<Option<u64>, ApiError> {
     id.map(str::trim)
         .filter(|s| !s.is_empty())
         .map(|s| {
@@ -178,7 +178,7 @@ async fn voice_channel_for(state: &WebState, requested: Option<&str>) -> Result<
         .ok_or_else(|| ApiError::bad_request("Bitte einen Sprachkanal auswählen"))
 }
 
-async fn enqueue(
+pub(crate) async fn enqueue(
     state: &WebState,
     tracks: Vec<TrackMeta>,
     voice_channel: u64,

@@ -116,6 +116,37 @@ pub fn permanent_reason(error: &str) -> Option<&'static str> {
         .map(|(_, reason)| *reason)
 }
 
+/// Ist das ein YouTube- oder SoundCloud-Link? (Für das öffentliche
+/// Dashboard, das nur solche Links annimmt.)
+pub fn is_supported_link(url: &str) -> bool {
+    let Some(rest) = url
+        .strip_prefix("https://")
+        .or_else(|| url.strip_prefix("http://"))
+    else {
+        return false;
+    };
+    let host = rest
+        .split(['/', '?', '#'])
+        .next()
+        .unwrap_or_default()
+        .split(':')
+        .next()
+        .unwrap_or_default()
+        .to_ascii_lowercase();
+    const HOSTS: &[&str] = &[
+        "youtube.com",
+        "www.youtube.com",
+        "m.youtube.com",
+        "music.youtube.com",
+        "youtu.be",
+        "soundcloud.com",
+        "www.soundcloud.com",
+        "m.soundcloud.com",
+        "on.soundcloud.com",
+    ];
+    HOSTS.contains(&host.as_str())
+}
+
 pub fn is_url(query: &str) -> bool {
     query.starts_with("https://") || query.starts_with("http://")
 }
@@ -211,6 +242,19 @@ mod tests {
         );
         assert_eq!(meta.duration, Some(Duration::from_secs(61)));
         Ok(())
+    }
+
+    #[test]
+    fn supported_links() {
+        assert!(is_supported_link("https://www.youtube.com/watch?v=abc"));
+        assert!(is_supported_link("https://youtu.be/abc"));
+        assert!(is_supported_link("https://music.youtube.com/watch?v=abc"));
+        assert!(is_supported_link("https://soundcloud.com/artist/track"));
+        assert!(is_supported_link("https://on.soundcloud.com/xyz"));
+        assert!(!is_supported_link("https://evil.example/youtube.com"));
+        assert!(!is_supported_link("https://youtube.com.evil.example/x"));
+        assert!(!is_supported_link("file:///etc/passwd"));
+        assert!(!is_supported_link("never gonna give you up"));
     }
 
     #[test]

@@ -236,6 +236,32 @@ pub async fn join(ctx: Context<'_>) -> Result<(), Error> {
     Ok(())
 }
 
+/// Postet den Link zum öffentlichen Dashboard (Songs per Link hinzufügen).
+#[poise::command(slash_command, guild_only)]
+pub async fn dashboard(ctx: Context<'_>) -> Result<(), Error> {
+    let settings = ctx.data().settings.current();
+    if !settings.public_enabled {
+        bail!("Das öffentliche Dashboard ist nicht aktiviert (Weboberfläche → Einstellungen)");
+    }
+    let link = settings.public_dashboard_link().ok_or_else(|| {
+        anyhow!("Keine öffentliche Adresse eingetragen (Weboberfläche → Einstellungen)")
+    })?;
+    let pin_hint = if settings.public_pin.is_empty() {
+        ""
+    } else {
+        "\nDie PIN gibt's bei den Admins. 🔒"
+    };
+    ctx.send(
+        CreateReply::default()
+            .embed(embeds::info(&format!(
+                "🎵 **Musik wünschen:** YouTube- oder SoundCloud-Links einfach ins Dashboard ziehen.{pin_hint}"
+            )))
+            .components(vec![embeds::dashboard_button(&link)]),
+    )
+    .await?;
+    Ok(())
+}
+
 /// Verlässt den Sprachkanal und leert die Warteschlange (DJ).
 #[poise::command(slash_command, guild_only, aliases("disconnect"))]
 pub async fn leave(ctx: Context<'_>) -> Result<(), Error> {
