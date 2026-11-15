@@ -13,7 +13,8 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
 - Selbstheilend: Retry ab letzter Position, Reconnect, abgestürzte Player starten neu
 - Neustart-fest: Warteschlange und Position überleben Neustarts und Updates
 - Weboberfläche mit Admin-Login: Wiedergabe, Playlists, Einstellungen, Logs, yt-dlp-Update
-- Öffentliches Dashboard (optional mit PIN): Songs per Drag & Drop von YouTube/SoundCloud wünschen
+- Öffentliches Dashboard (optional mit PIN): Songs per Drag & Drop von YouTube/SoundCloud wünschen – auch über Cloudflare Tunnel/Reverse Proxy (alles unter `/public`)
+- Autoplaylist: läuft, wenn niemand etwas wünscht; Wünsche spielen immer vor den Autoplaylist-Titeln
 - Discords Ende-zu-Ende-Verschlüsselung (DAVE) wird unterstützt
 
 **Schnellstart**
@@ -27,7 +28,7 @@ docker compose up -d
 
 Update: `docker compose pull && docker compose up -d` – die Musik läuft danach an derselben Stelle weiter.
 
-Weboberfläche: http://localhost:8080 · Befehle in Discord: `/play`, `/search`, `/skip`, `/queue`, `/playlist` …
+Weboberfläche: http://localhost:8080 · Befehle in Discord: `/play`, `/join`, `/search`, `/skip`, `/queue`, `/playlist`, `/dashboard` …
 
 Ausführliche Anleitung (Bot anlegen, alle Befehle, Betrieb, Fehlerbehebung): **[docs/HANDBUCH.md](docs/HANDBUCH.md)**
 
@@ -42,7 +43,8 @@ A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust
 - Self-healing: retries from the last position, voice reconnect, crashed players restart
 - Restart-proof: queue and position survive restarts and updates
 - Web UI with admin login: playback, playlists, settings, logs, one-click yt-dlp update
-- Public dashboard (optional PIN): request songs by dragging YouTube/SoundCloud links into the browser
+- Public dashboard (optional PIN): request songs by dragging YouTube/SoundCloud links into the browser – works behind Cloudflare Tunnel/reverse proxies (everything under `/public`)
+- Autoplaylist: plays when nobody requests anything; requests always play before autoplaylist tracks
 - Supports Discord's end-to-end voice encryption (DAVE)
 
 **Quick start**
@@ -56,7 +58,7 @@ docker compose up -d
 
 Update: `docker compose pull && docker compose up -d` – playback resumes where it left off.
 
-Web UI: http://localhost:8080 · Discord commands: `/play`, `/search`, `/skip`, `/queue`, `/playlist` …
+Web UI: http://localhost:8080 · Discord commands: `/play`, `/join`, `/search`, `/skip`, `/queue`, `/playlist`, `/dashboard` …
 
 The bot invite link needs the scopes `bot` + `applications.commands` and the permissions View Channel, Send Messages, Embed Links, Connect and Speak (`permissions=3165184`). The detailed manual is in German: [docs/HANDBUCH.md](docs/HANDBUCH.md).
 

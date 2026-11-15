@@ -51,7 +51,7 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 |---|---|---|
 | `/play <Link oder Suche> [soundcloud] [next]` | Abspielen/Einreihen, auch Playlists | alle (`next`: DJ) |
 | `/search <Suche> [soundcloud]` | 5 Treffer zur Auswahl | alle |
-| `/join` | Bot in deinen Sprachkanal holen, ohne etwas abzuspielen | alle |
+| `/join` | Bot in deinen Sprachkanal holen – startet die Autoplaylist, falls eine eingestellt ist und nichts läuft | alle |
 | `/leave` | Kanal verlassen, Warteschlange leeren | DJ |
 | `/dashboard` | Postet den Link zum öffentlichen Dashboard | alle |
 | `/skip` | Überspringen – direkt für DJ und Wünschenden, sonst Abstimmung | alle |
