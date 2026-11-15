@@ -31,8 +31,11 @@ pub struct QueueEntry {
     /// Eindeutig pro Server (für Web-Aktionen und Persistenz).
     pub id: u64,
     pub meta: Arc<TrackMeta>,
-    /// Discord-User-ID; 0 = Autoplaylist/Weboberfläche.
+    /// Discord-User-ID; 0 = Weboberfläche bzw. Autoplaylist.
     pub requester: u64,
+    /// Stammt aus der Autoplaylist. Wünsche werden immer davor eingereiht.
+    #[serde(default)]
+    pub autoplay: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]

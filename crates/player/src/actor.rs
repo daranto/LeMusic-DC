@@ -85,9 +85,49 @@ pub(crate) enum Msg {
     },
 }
 
+/// Wo ein Wunsch eingereiht wird: vor dem ersten Autoplaylist-Eintrag,
+/// sonst ans Ende.
+fn request_insert_index(queue: &VecDeque<QueueEntry>) -> usize {
+    queue.iter().position(|e| e.autoplay).unwrap_or(queue.len())
+}
+
 #[cfg(test)]
 mod tests {
+    use std::{collections::VecDeque, sync::Arc};
+
+    use lemusic_core::TrackMeta;
+
+    use super::{QueueEntry, request_insert_index};
     use crate::resolve::permanent_reason;
+
+    fn entry(id: u64, autoplay: bool) -> QueueEntry {
+        QueueEntry {
+            id,
+            meta: Arc::new(TrackMeta {
+                title: format!("T{id}"),
+                author: String::new(),
+                url: format!("https://youtu.be/{id}"),
+                duration: None,
+                thumbnail: None,
+            }),
+            requester: 0,
+            autoplay,
+        }
+    }
+
+    #[test]
+    fn requests_go_before_autoplaylist() {
+        // Nur Autoplaylist → Wunsch kommt als Nächstes.
+        let only_auto: VecDeque<_> = [entry(1, true), entry(2, true)].into();
+        assert_eq!(request_insert_index(&only_auto), 0);
+        // Wünsche + Autoplaylist → hinter die Wünsche, vor die Autoplaylist.
+        let mixed: VecDeque<_> = [entry(1, false), entry(2, false), entry(3, true)].into();
+        assert_eq!(request_insert_index(&mixed), 2);
+        // Keine Autoplaylist → ans Ende.
+        let requests: VecDeque<_> = [entry(1, false)].into();
+        assert_eq!(request_insert_index(&requests), 1);
+        assert_eq!(request_insert_index(&VecDeque::new()), 0);
+    }
 
     #[test]
     fn recognizes_permanent_errors() {
@@ -475,16 +515,17 @@ impl Actor {
             .collect();
         let added = entries.len();
 
-        let position = if req.play_next {
-            for entry in entries.into_iter().rev() {
-                self.queue.push_front(entry);
-            }
-            1
+        // Vorne einreihen, sonst hinter die anderen Wünsche, aber vor die
+        // Autoplaylist – ein Wunsch soll nie hinter ihr warten.
+        let index = if req.play_next {
+            0
         } else {
-            let pos = self.queue.len() + 1;
-            self.queue.extend(entries);
-            pos
+            request_insert_index(&self.queue)
         };
+        for (offset, entry) in entries.into_iter().enumerate() {
+            self.queue.insert(index + offset, entry);
+        }
+        let position = index + 1;
         self.dirty = true;
         self.idle_since = None;
 
@@ -527,6 +568,7 @@ impl Actor {
             id,
             meta: Arc::new(meta),
             requester,
+            autoplay: false,
         }
     }
 
@@ -721,7 +763,8 @@ impl Actor {
         fastrand::shuffle(&mut tracks);
         info!(guild_id = self.guild_id, playlist = %name, "Starte Autoplaylist");
         for meta in tracks {
-            let entry = self.new_entry(meta, 0);
+            let mut entry = self.new_entry(meta, 0);
+            entry.autoplay = true;
             self.queue.push_back(entry);
         }
         let next = self.queue.pop_front()?;

@@ -66,6 +66,8 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 | `/repeat <aus\|Track\|alle>` | Wiederholen | DJ |
 | `/playlist play\|save\|add\|list\|show\|delete` | Gespeicherte Playlists | play/list/show: alle, sonst DJ |
 
+**Wünsche vor Autoplaylist:** Läuft die Autoplaylist, kommt jeder Wunsch (Discord, öffentliches Dashboard, Weboberfläche) hinter die anderen Wünsche, aber vor die restlichen Autoplaylist-Titel – läuft nur die Autoplaylist, spielt der Wunsch also als Nächstes.
+
 **DJ** = Admins, Server-Manager und Mitglieder mit der DJ-Rolle. Ist keine DJ-Rolle eingestellt, sind alle DJ.
 
 ## Weboberfläche

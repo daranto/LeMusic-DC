@@ -115,7 +115,7 @@ function render({ player: p, voice_channels }) {
           ${e.track.thumbnail ? `<img loading="lazy" alt="" src="${esc(e.track.thumbnail)}">` : ""}
           <div class="meta">
             <a href="${esc(e.track.url)}" target="_blank" rel="noopener">${esc(e.track.title)}</a>
-            <small>${esc(e.track.author)}</small>
+            <small>${esc(e.track.author)}${e.autoplay ? " · 🔁 Autoplaylist" : " · 🙋 Wunsch"}</small>
           </div>
           <span class="dur">${fmt(e.track.duration)}</span>
         </li>`).join("") + (p.queue.length > 30 ? `<li class="empty">… und ${p.queue.length - 30} weitere</li>` : "")

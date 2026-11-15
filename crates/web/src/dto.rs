@@ -32,6 +32,7 @@ pub struct EntryDto {
     pub id: u64,
     pub track: TrackDto,
     pub requester: Option<String>,
+    pub autoplay: bool,
 }
 
 impl From<&QueueEntry> for EntryDto {
@@ -40,6 +41,7 @@ impl From<&QueueEntry> for EntryDto {
             id: e.id,
             track: TrackDto::from(&*e.meta),
             requester: (e.requester != 0).then(|| e.requester.to_string()),
+            autoplay: e.autoplay,
         }
     }
 }

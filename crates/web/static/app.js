@@ -253,7 +253,7 @@ function renderPlayer() {
         ${e.track.thumbnail ? `<img loading="lazy" alt="" src="${esc(e.track.thumbnail)}">` : ""}
         <div class="meta">
           <a href="${esc(e.track.url)}" target="_blank" rel="noopener">${esc(e.track.title)}</a>
-          <small>${esc(e.track.author)}${e.requester ? "" : " · Web/Autoplaylist"}</small>
+          <small>${esc(e.track.author)}${e.autoplay ? " · 🔁 Autoplaylist" : e.requester ? "" : " · Web"}</small>
         </div>
         <span class="dur">${fmt(e.track.duration)}</span>
         <div class="item-actions">
