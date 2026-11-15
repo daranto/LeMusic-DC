@@ -1127,6 +1127,45 @@ impl Actor {
 
     /// Stellt einen gespeicherten Zustand wieder her (nach Neustart oder
     /// Absturz des Actors).
+    /// Zustände von vor der Autoplaylist-Markierung: Einträge ohne
+    /// Wünschenden, die in der eingestellten Autoplaylist vorkommen, als
+    /// Autoplaylist markieren – sonst würden neue Wünsche dahinter landen.
+    async fn mark_legacy_autoplay(&mut self, current: &mut Option<SavedCurrent>) {
+        let unmarked = |e: &QueueEntry| e.requester == 0 && !e.autoplay;
+        if !self.queue.iter().any(unmarked) && !current.as_ref().is_some_and(|c| unmarked(&c.entry))
+        {
+            return;
+        }
+        let Ok(settings) = GuildSettings::load(&self.shared.db, self.guild_id).await else {
+            return;
+        };
+        let Some(name) = settings.autoplaylist else {
+            return;
+        };
+        let Ok(Some(tracks)) = self.shared.db.playlist_get(&name).await else {
+            return;
+        };
+        let urls: std::collections::HashSet<&str> = tracks.iter().map(|t| t.url.as_str()).collect();
+        let mut marked = 0;
+        for entry in self
+            .queue
+            .iter_mut()
+            .chain(current.as_mut().map(|c| &mut c.entry))
+        {
+            if unmarked(entry) && urls.contains(entry.meta.url.as_str()) {
+                entry.autoplay = true;
+                marked += 1;
+            }
+        }
+        if marked > 0 {
+            info!(
+                guild_id = self.guild_id,
+                marked, "Ältere Autoplaylist-Einträge markiert"
+            );
+            self.dirty = true;
+        }
+    }
+
     async fn restore(&mut self, saved: SavedState) {
         self.next_id = saved
             .queue
@@ -1141,6 +1180,8 @@ impl Actor {
         self.volume = saved.volume;
         self.paused = saved.paused;
         self.queue = saved.queue.into();
+        let mut current = saved.current;
+        self.mark_legacy_autoplay(&mut current).await;
 
         let stay = !self.shared.settings.current().pause_when_alone;
         if !stay && self.listeners(saved.voice_channel) == Some(0) {
@@ -1157,7 +1198,7 @@ impl Actor {
             return;
         }
         info!(guild_id = self.guild_id, "Wiedergabe wiederhergestellt");
-        match saved.current {
+        match current {
             Some(current) => {
                 if let Err(e) = self.start(current.entry, current.position, 0, false).await {
                     warn!(error = %e, "Wiederherstellung: Track nicht startbar");
