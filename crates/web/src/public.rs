@@ -190,7 +190,7 @@ pub(crate) async fn unlock(
         let mut response = Json(json!({ "ok": true })).into_response();
         response.headers_mut().insert(
             header::SET_COOKIE,
-            named_cookie_header(COOKIE, &token, SESSION_TTL.as_secs()),
+            named_cookie_header(COOKIE, &token, SESSION_TTL.as_secs(), "/public"),
         );
         return Ok(response);
     }

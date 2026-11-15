@@ -73,12 +73,17 @@ pub(crate) fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
 }
 
 fn cookie_header(token: &str, max_age: u64) -> HeaderValue {
-    named_cookie_header(COOKIE, token, max_age)
+    named_cookie_header(COOKIE, token, max_age, "/")
 }
 
-pub(crate) fn named_cookie_header(name: &str, token: &str, max_age: u64) -> HeaderValue {
+pub(crate) fn named_cookie_header(
+    name: &str,
+    token: &str,
+    max_age: u64,
+    path: &str,
+) -> HeaderValue {
     HeaderValue::from_str(&format!(
-        "{name}={token}; HttpOnly; SameSite=Strict; Path=/; Max-Age={max_age}"
+        "{name}={token}; HttpOnly; SameSite=Strict; Path={path}; Max-Age={max_age}"
     ))
     .unwrap_or_else(|_| HeaderValue::from_static(""))
 }

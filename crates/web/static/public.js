@@ -31,7 +31,7 @@ async function api(method, path, body) {
     opts.body = JSON.stringify(body);
     opts.headers["Content-Type"] = "application/json";
   }
-  const res = await fetch(`/api/public${path}`, opts);
+  const res = await fetch(`/public/api${path}`, opts);
   let data = null;
   try { data = await res.json(); } catch { /* leer */ }
   if (res.status === 404) {

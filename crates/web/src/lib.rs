@@ -94,12 +94,15 @@ pub fn router(state: WebState) -> Router {
         .route(
             "/system/cookies",
             put(api::put_cookies).delete(api::delete_cookies),
-        )
-        // Öffentliches Dashboard (eigene Gast-Sitzung, optional PIN).
-        .route("/public/status", get(public::status))
-        .route("/public/unlock", post(public::unlock))
-        .route("/public/player", get(public::player))
-        .route("/public/add", post(public::add));
+        );
+
+    // Öffentliches Dashboard: alles unter /public/…, damit ein Reverse
+    // Proxy bzw. Tunnel nur diesen Pfad freigeben muss (Admin bleibt intern).
+    let public_api = Router::new()
+        .route("/status", get(public::status))
+        .route("/unlock", post(public::unlock))
+        .route("/player", get(public::player))
+        .route("/add", post(public::add));
 
     Router::new()
         .route("/health", get(health))
@@ -108,7 +111,11 @@ pub fn router(state: WebState) -> Router {
         .route("/style.css", get(assets::style_css))
         .route("/dnd.js", get(assets::dnd_js))
         .route("/public", get(assets::public_index))
-        .route("/public.js", get(assets::public_js))
+        .route("/public/", get(assets::public_index))
+        .route("/public/style.css", get(assets::style_css))
+        .route("/public/dnd.js", get(assets::dnd_js))
+        .route("/public/public.js", get(assets::public_js))
+        .nest("/public/api", public_api)
         .nest("/api", api)
         .with_state(state)
 }
