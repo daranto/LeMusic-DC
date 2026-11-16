@@ -14,7 +14,7 @@ use tracing::{error, info, warn};
 use crate::{
     actor::{Actor, Msg, Reply, SavedState, state_key},
     model::{
-        EnqueueOutcome, EnqueueRequest, PlayerEvent, QueueEntry, RepeatMode, Snapshot,
+        EnqueueOutcome, EnqueueRequest, PlayerEvent, QueueEdit, QueueEntry, RepeatMode, Snapshot,
         VoicePresence,
     },
 };
@@ -226,6 +226,10 @@ impl Player {
     /// Verschiebt von `from` nach `to` (0-basiert).
     pub async fn move_entry(&self, from: usize, to: usize) -> Result<QueueEntry> {
         self.request(|r| Msg::Move(from, to, r)).await
+    }
+    /// Bearbeitet die Warteschlange; liefert die Zahl der betroffenen Einträge.
+    pub async fn edit_queue(&self, edit: QueueEdit) -> Result<usize> {
+        self.request(|r| Msg::Edit(edit, r)).await
     }
     pub async fn clear(&self) -> Result<usize> {
         self.request(Msg::Clear).await

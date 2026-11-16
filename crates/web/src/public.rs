@@ -308,7 +308,7 @@ pub(crate) async fn add(
     }
 
     let count = tracks.len();
-    let Json(result) = enqueue(&state, tracks, channel, false).await?;
+    let Json(result) = enqueue(&state, tracks, channel, false, None).await?;
     info!(
         links = links.len(),
         tracks = count,

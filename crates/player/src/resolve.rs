@@ -107,6 +107,12 @@ pub fn permanent_reason(error: &str) -> Option<&'static str> {
         ("copyright", "wegen Urheberrecht gesperrt"),
         ("has been removed", "wurde entfernt"),
         ("Video unavailable", "nicht verfügbar"),
+        ("video is unavailable", "nicht verfügbar"),
+        (
+            "account associated with this video has been terminated",
+            "Kanal wurde gelöscht",
+        ),
+        ("This track was not found", "nicht gefunden"),
         ("This video is not available", "nicht verfügbar"),
         ("HTTP Error 404", "nicht gefunden"),
     ];
@@ -164,6 +170,35 @@ pub async fn resolve(query: &str, source: SearchSource) -> Result<Vec<TrackMeta>
     }
 }
 
+/// Ergebnis einer Verfügbarkeitsprüfung.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Availability {
+    Available,
+    /// Endgültig nicht abspielbar (gelöscht, privat, gesperrt …).
+    Gone(String),
+    /// Prüfung fehlgeschlagen (Netzwerk, Rate-Limit) – kein Urteil.
+    Unknown(String),
+}
+
+/// Prüft, ob ein einzelner Titel noch abspielbar ist.
+pub async fn check_available(url: &str) -> Availability {
+    if !is_url(url) {
+        return Availability::Gone("kein gültiger Link".into());
+    }
+    match run_ytdlp(url).await {
+        Ok(_) => Availability::Available,
+        Err(e) => {
+            let msg = format!("{e:#}");
+            match msg.strip_prefix(UNPLAYABLE) {
+                Some(reason) => Availability::Gone(reason.to_string()),
+                None => Availability::Unknown(msg),
+            }
+        }
+    }
+}
+
+const UNPLAYABLE: &str = "Nicht abspielbar: ";
+
 /// Sucht und liefert bis zu `limit` Treffer.
 pub async fn search(query: &str, source: SearchSource, limit: usize) -> Result<Vec<TrackMeta>> {
     let limit = limit.clamp(1, 10);
@@ -198,7 +233,7 @@ async fn run_ytdlp(target: &str) -> Result<Vec<TrackMeta>> {
             .map(|l| l.trim_start_matches("ERROR:").trim())
             .unwrap_or("unbekannter Fehler");
         if let Some(reason) = permanent_reason(reason) {
-            bail!("Nicht abspielbar: {reason}");
+            bail!("{UNPLAYABLE}{reason}");
         }
         // yt-dlp hängt gern lange Hilfetexte an – erster Satz reicht.
         let short = reason.split(". ").next().unwrap_or(reason);

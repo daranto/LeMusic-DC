@@ -9,6 +9,7 @@ const INDEX: &str = include_str!("../static/index.html");
 const APP_JS: &str = include_str!("../static/app.js");
 const STYLE_CSS: &str = include_str!("../static/style.css");
 const DND_JS: &str = include_str!("../static/dnd.js");
+const TRACKLIST_JS: &str = include_str!("../static/tracklist.js");
 const PUBLIC_HTML: &str = include_str!("../static/public.html");
 const PUBLIC_JS: &str = include_str!("../static/public.js");
 
@@ -38,6 +39,10 @@ fn html_page(body: &'static str) -> impl IntoResponse {
 
 pub async fn dnd_js() -> impl IntoResponse {
     script(DND_JS)
+}
+
+pub async fn tracklist_js() -> impl IntoResponse {
+    script(TRACKLIST_JS)
 }
 
 pub async fn public_js() -> impl IntoResponse {

@@ -8,14 +8,40 @@
 
 Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Rust – ein Neubau von [jagrosh/MusicBot](https://github.com/jagrosh/MusicBot). Läuft als ein Docker-Container und wird über eine Weboberfläche konfiguriert.
 
-**Highlights**
+**Stabilität**
 - Keine Aussetzer: Tracks werden vollständig geladen und vorgepuffert, der nächste Track liegt bereit (Skip < 1 s)
-- Selbstheilend: Retry ab letzter Position, Reconnect, abgestürzte Player starten neu
+- Selbstheilend: Retry ab letzter Position, Reconnect, abgestürzte Player starten neu; tote Videos werden erkannt und übersprungen
 - Neustart-fest: Warteschlange und Position überleben Neustarts und Updates
-- Weboberfläche mit Admin-Login: Wiedergabe, Playlists, Einstellungen, Logs, yt-dlp-Update
-- Öffentliches Dashboard (optional mit PIN): Songs per Drag & Drop von YouTube/SoundCloud wünschen – auch über Cloudflare Tunnel/Reverse Proxy (alles unter `/public`)
-- Autoplaylist: läuft, wenn niemand etwas wünscht; Wünsche spielen immer vor den Autoplaylist-Titeln
 - Discords Ende-zu-Ende-Verschlüsselung (DAVE) wird unterstützt
+
+**Funktionen**
+
+*Discord*
+- `/play`, `/search`, `/skip` (mit Abstimmung), `/queue`, `/seek`, `/repeat`, `/volume`, `/playlist` …
+- `/join` holt den Bot in deinen Kanal und startet die Autoplaylist; `/dashboard` postet den Link zum öffentlichen Dashboard
+- „Spiele jetzt“-Ansagen im festgelegten Kanal, mit Knopf **🎵 Song hinzufügen**
+
+*Weboberfläche (Admin-Login)*
+- Wiedergabe live steuern: Pause, Skip, Spulen, Lautstärke, Wiederholen, direkt in einen Sprachkanal abspielen
+- **Warteschlange und Playlists bearbeiten wie in einem Musikplayer:**
+  - Titel per **Drag & Drop** verschieben (Maus, Touch und Tastatur)
+  - **Mehrfachauswahl** mit Shift-Klick: als Nächstes, ans Ende, in eine Playlist kopieren/verschieben, entfernen
+  - **Rückgängig** nach Entfernen, Leeren, Sortieren
+  - **Filter** für große Listen, Kontextmenü per Rechtsklick
+  - Titel aus einer Playlist direkt in die Warteschlange oder in eine andere Playlist ziehen und umgekehrt
+- **Playlists** (bis 1000 Titel):
+  - aus YouTube-/SoundCloud-Playlists importieren und später **aktualisieren** (holt nur neue Titel)
+  - umbenennen, duplizieren, sortieren, Duplikate entfernen, ab einem bestimmten Titel abspielen
+  - **Verfügbarkeit prüfen:** findet gelöschte, private oder gesperrte Videos, die sich dann mit einem Klick entfernen lassen
+  - Export/Import als JSON-Datei
+  - Konfliktschutz: Gleichzeitige Änderungen (zweiter Tab, Discord) überschreiben sich nicht
+- **Autoplaylist:** läuft, wenn niemand etwas wünscht; Wünsche spielen immer vor den Autoplaylist-Titeln
+- Einstellungen, Logs, yt-dlp-Update per Klick, Selbsttest, YouTube-Cookies
+
+*Öffentliches Dashboard (optional mit 4-stelliger PIN)*
+- Gäste sehen, was läuft, und wünschen Songs per Drag & Drop oder Einfügen von YouTube-/SoundCloud-Links
+- Läuft auch hinter Cloudflare Tunnel/Reverse Proxy: alles liegt unter `/public`, die Admin-Seite bleibt intern
+- Schutz: nur YouTube/SoundCloud, Limits pro Minute, keine Steuerung für Gäste
 
 **Schnellstart**
 
@@ -38,14 +64,40 @@ Ausführliche Anleitung (Bot anlegen, alle Befehle, Betrieb, Fehlerbehebung): **
 
 A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust – a rewrite of [jagrosh/MusicBot](https://github.com/jagrosh/MusicBot). Runs as a single Docker container and is configured through a web UI.
 
-**Highlights**
+**Reliability**
 - No dropouts: tracks are fully downloaded and pre-buffered, the next track is ready ahead of time (skip < 1 s)
-- Self-healing: retries from the last position, voice reconnect, crashed players restart
+- Self-healing: retries from the last position, voice reconnect, crashed players restart; dead videos are detected and skipped
 - Restart-proof: queue and position survive restarts and updates
-- Web UI with admin login: playback, playlists, settings, logs, one-click yt-dlp update
-- Public dashboard (optional PIN): request songs by dragging YouTube/SoundCloud links into the browser – works behind Cloudflare Tunnel/reverse proxies (everything under `/public`)
-- Autoplaylist: plays when nobody requests anything; requests always play before autoplaylist tracks
 - Supports Discord's end-to-end voice encryption (DAVE)
+
+**Features**
+
+*Discord*
+- `/play`, `/search`, `/skip` (with voting), `/queue`, `/seek`, `/repeat`, `/volume`, `/playlist` …
+- `/join` summons the bot and starts the autoplaylist; `/dashboard` posts the public dashboard link
+- "Now playing" announcements in a configured channel, with a **🎵 Song hinzufügen** ("add a song") button
+
+*Web UI (admin login)*
+- Live playback control: pause, skip, seek, volume, repeat, play straight into a voice channel
+- **Edit the queue and playlists like a music player:**
+  - **drag & drop** to reorder (mouse, touch and keyboard)
+  - **multi-select** with shift-click: play next, move to end, copy/move to a playlist, remove
+  - **undo** after removing, clearing or sorting
+  - **filter** for large lists, right-click context menu
+  - drag tracks from a playlist into the queue or another playlist, and vice versa
+- **Playlists** (up to 1000 tracks):
+  - import from YouTube/SoundCloud playlists and **refresh** later (fetches only new tracks)
+  - rename, duplicate, sort, remove duplicates, play from a given track
+  - **availability check:** finds deleted, private or blocked videos so you can remove them in one click
+  - JSON export/import
+  - conflict protection: simultaneous edits (second tab, Discord) never overwrite each other
+- **Autoplaylist:** plays when nobody requests anything; requests always play before autoplaylist tracks
+- Settings, live logs, one-click yt-dlp update, self-test, YouTube cookies
+
+*Public dashboard (optional 4-digit PIN)*
+- Guests see what's playing and request songs by dragging or pasting YouTube/SoundCloud links
+- Works behind Cloudflare Tunnel/reverse proxies: everything lives under `/public`, the admin UI stays internal
+- Protected: YouTube/SoundCloud only, rate limits, no playback control for guests
 
 **Quick start**
 

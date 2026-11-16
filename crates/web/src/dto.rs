@@ -27,6 +27,48 @@ impl From<&TrackMeta> for TrackDto {
     }
 }
 
+/// Titel, wie ihn der Browser zurückschickt (Kopieren, Einfügen, Import).
+#[derive(Deserialize)]
+pub struct TrackInput {
+    pub title: String,
+    #[serde(default)]
+    pub author: String,
+    pub url: String,
+    #[serde(default)]
+    pub duration: Option<u64>,
+    #[serde(default)]
+    pub thumbnail: Option<String>,
+}
+
+fn is_http(s: &str) -> bool {
+    s.starts_with("https://") || s.starts_with("http://")
+}
+
+impl TrackInput {
+    pub fn into_meta(self) -> Result<TrackMeta> {
+        let url = self.url.trim().to_string();
+        if !is_http(&url) || url.len() > 2048 {
+            anyhow::bail!("Ungültiger Link: {url}");
+        }
+        let clip = |s: String, n: usize| s.trim().chars().take(n).collect::<String>();
+        let title = clip(self.title, 300);
+        Ok(TrackMeta {
+            title: if title.is_empty() { url.clone() } else { title },
+            author: clip(self.author, 200),
+            url,
+            duration: self.duration.map(std::time::Duration::from_secs),
+            thumbnail: self
+                .thumbnail
+                .map(|t| t.trim().to_string())
+                .filter(|t| is_http(t) && t.len() <= 2048),
+        })
+    }
+
+    pub fn into_metas(list: Vec<Self>) -> Result<Vec<TrackMeta>> {
+        list.into_iter().map(Self::into_meta).collect()
+    }
+}
+
 #[derive(Serialize)]
 pub struct EntryDto {
     pub id: u64,
@@ -145,6 +187,29 @@ impl GuildSettingsDto {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn track_input_is_validated() {
+        let ok = TrackInput {
+            title: " T ".into(),
+            author: String::new(),
+            url: "https://youtu.be/abc".into(),
+            duration: Some(61),
+            thumbnail: Some("javascript:alert(1)".into()),
+        }
+        .into_meta();
+        let meta = ok.ok();
+        assert_eq!(meta.as_ref().map(|m| m.title.as_str()), Some("T"));
+        assert_eq!(meta.and_then(|m| m.thumbnail), None);
+        let bad = TrackInput {
+            title: "x".into(),
+            author: String::new(),
+            url: "file:///etc/passwd".into(),
+            duration: None,
+            thumbnail: None,
+        };
+        assert!(bad.into_meta().is_err());
+    }
 
     #[test]
     fn guild_settings_roundtrip_keeps_big_ids() -> Result<()> {

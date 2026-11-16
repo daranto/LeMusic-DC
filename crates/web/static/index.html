@@ -84,12 +84,10 @@
         <div class="card" id="queue-card">
           <div class="card-head">
             <h2>Warteschlange <span class="muted" id="queue-meta"></span></h2>
-            <div class="row">
-              <button class="btn small" id="btn-save-queue">Als Playlist speichern</button>
-              <button class="btn small danger" id="btn-clear">Leeren</button>
-            </div>
+            <button class="btn small" id="btn-queue-more" aria-haspopup="menu">⋯ Mehr</button>
           </div>
-          <ol class="queue" id="queue"></ol>
+          <div id="queue"></div>
+          <p class="drop-note">Tipp: Titel am Griff ⠿ ziehen zum Verschieben, Häkchen für Mehrfachauswahl, Rechtsklick oder ⋯ für weitere Aktionen.</p>
         </div>
       </section>
 
@@ -104,6 +102,7 @@
               <label class="check"><input type="checkbox" name="soundcloud"> Suche auf SoundCloud</label>
               <button class="btn primary" type="submit">Anlegen / importieren</button>
               <p class="muted small-note">Existiert der Name schon, werden die Titel angehängt. Bis zu 1000 Titel. Links lassen sich auch hierher, auf eine Playlist in der Liste oder in die geöffnete Playlist ziehen.</p>
+              <label class="btn small file-btn">⤒ Aus Datei importieren (JSON)<input type="file" id="playlist-import" accept=".json,application/json" hidden></label>
             </form>
             <div class="card">
               <h2>Playlists</h2>
@@ -212,6 +211,7 @@
 
   <div id="toasts" aria-live="polite"></div>
   <script src="/dnd.js"></script>
+  <script src="/tracklist.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

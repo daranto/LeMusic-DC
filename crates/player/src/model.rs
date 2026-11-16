@@ -111,6 +111,34 @@ pub struct EnqueueRequest {
     pub text_channel: Option<u64>,
     /// Vorne statt hinten einreihen.
     pub play_next: bool,
+    /// Vor diesem Eintrag einreihen (Drag & Drop in der Weboberfläche).
+    /// Hat Vorrang vor `play_next`; fehlt der Eintrag, gilt die normale Regel.
+    pub before: Option<u64>,
+}
+
+/// Bearbeitung der Warteschlange über Eintrags-IDs (stabil, auch wenn
+/// zwischendurch ein Track zu Ende geht).
+#[derive(Debug, Clone, Deserialize)]
+#[serde(tag = "op", rename_all = "snake_case")]
+pub enum QueueEdit {
+    Remove {
+        ids: Vec<u64>,
+    },
+    /// Verschiebt die Einträge (Reihenfolge bleibt) vor `before`;
+    /// `front` = ganz nach vorne, beides leer = ans Ende.
+    Move {
+        ids: Vec<u64>,
+        #[serde(default)]
+        before: Option<u64>,
+        #[serde(default)]
+        front: bool,
+    },
+    /// Stellt die zuletzt entfernten Einträge wieder her.
+    Restore,
+    /// Entfernt doppelte Titel (der erste bleibt).
+    Dedupe,
+    /// Entfernt alle Titel aus der Autoplaylist.
+    RemoveAutoplay,
 }
 
 /// Liefert die Zahl der (menschlichen) Zuhörer in einem Sprachkanal.

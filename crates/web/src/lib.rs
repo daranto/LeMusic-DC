@@ -3,6 +3,7 @@
 mod api;
 mod assets;
 mod auth;
+mod check;
 mod dto;
 mod public;
 
@@ -33,6 +34,7 @@ pub struct WebState {
     pub started: Instant,
     pub(crate) limiter: Arc<auth::LoginLimiter>,
     pub(crate) public: Arc<public::PublicState>,
+    pub(crate) checks: Arc<check::Checks>,
 }
 
 impl WebState {
@@ -56,6 +58,7 @@ impl WebState {
             started: Instant::now(),
             limiter: Arc::default(),
             public: Arc::default(),
+            checks: Arc::default(),
         }
     }
 }
@@ -70,6 +73,8 @@ pub fn router(state: WebState) -> Router {
         .route("/player", get(api::player))
         .route("/player/play", post(api::play))
         .route("/player/join", post(api::join))
+        .route("/player/queue", post(api::edit_queue))
+        .route("/player/enqueue", post(api::enqueue_tracks))
         .route("/player/{action}", post(api::player_action))
         .route(
             "/settings/bot",
@@ -81,20 +86,34 @@ pub fn router(state: WebState) -> Router {
         )
         .route("/playlists", get(api::list_playlists))
         .route("/playlists/save-queue", post(api::save_queue_as_playlist))
+        .route("/playlists/import", post(api::import_playlist))
         .route(
             "/playlists/{name}",
             get(api::get_playlist).delete(api::delete_playlist),
         )
         .route("/playlists/{name}/play", post(api::play_playlist))
         .route("/playlists/{name}/add", post(api::add_to_playlist))
-        .route("/playlists/{name}/remove", post(api::remove_from_playlist))
+        .route("/playlists/{name}/append", post(api::append_tracks))
+        .route("/playlists/{name}/edit", post(api::edit_playlist))
+        .route("/playlists/{name}/rename", post(api::rename_playlist))
+        .route("/playlists/{name}/duplicate", post(api::duplicate_playlist))
+        .route("/playlists/{name}/source", put(api::set_playlist_source))
+        .route("/playlists/{name}/sync", post(api::sync_playlist))
+        .route("/playlists/{name}/export", get(api::export_playlist))
+        .route(
+            "/playlists/{name}/check",
+            get(api::check_status)
+                .post(api::start_check)
+                .delete(api::cancel_check),
+        )
         .route("/logs", get(api::logs))
         .route("/system/ytdlp-update", post(api::ytdlp_update))
         .route("/system/selftest", post(api::selftest))
         .route(
             "/system/cookies",
             put(api::put_cookies).delete(api::delete_cookies),
-        );
+        )
+        .layer(axum::middleware::map_response(no_store));
 
     // Öffentliches Dashboard: alles unter /public/…, damit ein Reverse
     // Proxy bzw. Tunnel nur diesen Pfad freigeben muss (Admin bleibt intern).
@@ -102,7 +121,8 @@ pub fn router(state: WebState) -> Router {
         .route("/status", get(public::status))
         .route("/unlock", post(public::unlock))
         .route("/player", get(public::player))
-        .route("/add", post(public::add));
+        .route("/add", post(public::add))
+        .layer(axum::middleware::map_response(no_store));
 
     Router::new()
         .route("/health", get(health))
@@ -110,6 +130,7 @@ pub fn router(state: WebState) -> Router {
         .route("/app.js", get(assets::app_js))
         .route("/style.css", get(assets::style_css))
         .route("/dnd.js", get(assets::dnd_js))
+        .route("/tracklist.js", get(assets::tracklist_js))
         .route("/public", get(assets::public_index))
         .route("/public/", get(assets::public_index))
         .route("/public/style.css", get(assets::style_css))
@@ -118,6 +139,15 @@ pub fn router(state: WebState) -> Router {
         .nest("/public/api", public_api)
         .nest("/api", api)
         .with_state(state)
+}
+
+/// API-Antworten nie zwischenspeichern (Browser, Proxys).
+async fn no_store(mut response: Response) -> Response {
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        axum::http::HeaderValue::from_static("no-store"),
+    );
+    response
 }
 
 /// Startseite: Über die öffentliche Adresse (z. B. Cloudflare Tunnel) direkt

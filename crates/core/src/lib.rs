@@ -17,5 +17,6 @@ pub use directory::{GuildDirectory, GuildInfo, NamedId};
 pub use guild::GuildSettings;
 pub use health::Health;
 pub use logbuf::{LogBuffer, LogLine};
+pub use playlists::{Playlist, PlaylistConflict, PlaylistInfo, PlaylistOp, SortKey};
 pub use settings::{BotSettings, SettingsStore};
-pub use track::{TrackMeta, format_duration, parse_duration};
+pub use track::{TrackMeta, format_duration, parse_duration, track_key};

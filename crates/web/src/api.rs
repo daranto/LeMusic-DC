@@ -11,8 +11,16 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use lemusic_core::{BotSettings, GuildSettings, TrackMeta, config::cookies_path, parse_duration};
-use lemusic_player::{EnqueueRequest, RepeatMode, SearchSource, resolve, selftest};
+use lemusic_core::{
+    BotSettings, GuildSettings, Playlist, PlaylistConflict, PlaylistOp, SortKey, TrackMeta,
+    config::cookies_path,
+    parse_duration,
+    playlists::{apply_ops, validate_name},
+};
+use lemusic_player::{
+    EnqueueRequest, QueueEdit, RepeatMode, SearchSource, is_supported_link, is_url, resolve,
+    selftest,
+};
 use serde::Deserialize;
 use serde_json::{Value, json};
 use tokio::process::Command;
@@ -21,7 +29,7 @@ use tracing::{info, warn};
 use crate::{
     WebState,
     auth::Admin,
-    dto::{GuildSettingsDto, PlayerDto, TrackDto},
+    dto::{GuildSettingsDto, PlayerDto, TrackDto, TrackInput},
     health_report,
 };
 
@@ -70,6 +78,12 @@ impl ApiError {
 /// Fehler aus Player/DB sind fast immer Bedienfehler mit lesbarer Meldung.
 impl From<anyhow::Error> for ApiError {
     fn from(e: anyhow::Error) -> Self {
+        if e.downcast_ref::<PlaylistConflict>().is_some() {
+            return Self {
+                status: StatusCode::CONFLICT,
+                message: e.to_string(),
+            };
+        }
         Self::bad_request(format!("{e:#}"))
     }
 }
@@ -183,6 +197,7 @@ pub(crate) async fn enqueue(
     tracks: Vec<TrackMeta>,
     voice_channel: u64,
     next: bool,
+    before: Option<u64>,
 ) -> ApiResult {
     let settings = GuildSettings::load(&state.db, state.guild_id).await?;
     let (tracks, too_long): (Vec<_>, Vec<_>) = tracks.into_iter().partition(|t| {
@@ -202,6 +217,7 @@ pub(crate) async fn enqueue(
             voice_channel,
             text_channel: None,
             play_next: next,
+            before,
         })
         .await?;
     Ok(Json(json!({
@@ -223,7 +239,7 @@ pub(crate) async fn play(
         SearchSource::YouTube
     };
     let tracks = resolve(&form.query, source).await?;
-    enqueue(&state, tracks, channel, form.next).await
+    enqueue(&state, tracks, channel, form.next, None).await
 }
 
 #[derive(Deserialize)]
@@ -244,6 +260,54 @@ pub(crate) async fn join(
         .join(channel, None)
         .await?;
     Ok(Json(json!({ "ok": true, "autoplaylist": autoplaylist })))
+}
+
+/// Warteschlange bearbeiten (Mehrfachauswahl, Drag & Drop, Rückgängig).
+pub(crate) async fn edit_queue(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Json(edit): Json<QueueEdit>,
+) -> ApiResult {
+    let affected = state
+        .players
+        .player(state.guild_id)
+        .edit_queue(edit)
+        .await?;
+    Ok(Json(json!({ "affected": affected })))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct EnqueueTracksForm {
+    tracks: Vec<TrackInput>,
+    voice_channel: Option<String>,
+    /// Als Nächstes einreihen.
+    #[serde(default)]
+    next: bool,
+    /// Sofort spielen (aktueller Track wird übersprungen).
+    #[serde(default)]
+    now: bool,
+    /// Vor diesem Warteschlangen-Eintrag einreihen.
+    #[serde(default)]
+    before: Option<u64>,
+}
+
+/// Bereits bekannte Titel einreihen (aus einer Playlist gezogen) – ohne
+/// erneutes Auflösen über yt-dlp.
+pub(crate) async fn enqueue_tracks(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Json(form): Json<EnqueueTracksForm>,
+) -> ApiResult {
+    let tracks = TrackInput::into_metas(form.tracks)?;
+    if tracks.is_empty() || tracks.len() > lemusic_core::playlists::MAX_TRACKS {
+        return Err(ApiError::bad_request("Ungültige Anzahl Titel"));
+    }
+    let channel = voice_channel_for(&state, form.voice_channel.as_deref()).await?;
+    let result = enqueue(&state, tracks, channel, form.next || form.now, form.before).await?;
+    if form.now && result.0.get("position").and_then(Value::as_u64) == Some(1) {
+        state.players.player(state.guild_id).skip().await?;
+    }
+    Ok(result)
 }
 
 #[derive(Deserialize, Default)]
@@ -373,12 +437,39 @@ pub(crate) async fn list_playlists(State(state): State<WebState>, _admin: Admin)
     Ok(Json(json!(state.db.playlist_list().await?)))
 }
 
-async fn load_playlist(state: &WebState, name: &str) -> Result<Vec<TrackMeta>, ApiError> {
+async fn load_playlist(state: &WebState, name: &str) -> Result<Playlist, ApiError> {
     state
         .db
-        .playlist_get(name)
+        .playlist_load(name)
         .await?
         .ok_or_else(|| ApiError::not_found("Playlist nicht gefunden"))
+}
+
+fn playlist_json(p: &Playlist) -> Value {
+    let tracks: Vec<TrackDto> = p.tracks.iter().map(TrackDto::from).collect();
+    let duration: u64 = p
+        .tracks
+        .iter()
+        .filter_map(|t| t.duration)
+        .map(|d| d.as_secs())
+        .sum();
+    json!({
+        "name": p.name,
+        "revision": p.revision,
+        "source": p.source,
+        "updated_at": p.updated_at,
+        "duration": duration,
+        "tracks": tracks,
+    })
+}
+
+async fn playlist_response(state: &WebState, name: &str, extra: Value) -> ApiResult {
+    let p = load_playlist(state, name).await?;
+    let mut out = playlist_json(&p);
+    if let (Some(out), Value::Object(extra)) = (out.as_object_mut(), extra) {
+        out.extend(extra);
+    }
+    Ok(Json(out))
 }
 
 pub(crate) async fn get_playlist(
@@ -386,9 +477,7 @@ pub(crate) async fn get_playlist(
     _admin: Admin,
     Path(name): Path<String>,
 ) -> ApiResult {
-    let tracks = load_playlist(&state, &name).await?;
-    let tracks: Vec<TrackDto> = tracks.iter().map(TrackDto::from).collect();
-    Ok(Json(json!({ "name": name, "tracks": tracks })))
+    playlist_response(&state, &name, json!({})).await
 }
 
 pub(crate) async fn delete_playlist(
@@ -399,6 +488,7 @@ pub(crate) async fn delete_playlist(
     if !state.db.playlist_delete(&name).await? {
         return Err(ApiError::not_found("Playlist nicht gefunden"));
     }
+    state.checks.forget(&name);
     ok()
 }
 
@@ -407,6 +497,9 @@ pub(crate) struct PlayPlaylistForm {
     voice_channel: Option<String>,
     #[serde(default)]
     shuffle: bool,
+    /// Ab dieser Position (0-basiert) abspielen.
+    #[serde(default)]
+    start: usize,
 }
 
 pub(crate) async fn play_playlist(
@@ -415,7 +508,10 @@ pub(crate) async fn play_playlist(
     Path(name): Path<String>,
     Json(form): Json<PlayPlaylistForm>,
 ) -> ApiResult {
-    let mut tracks = load_playlist(&state, &name).await?;
+    let mut tracks = load_playlist(&state, &name).await?.tracks;
+    if form.start > 0 {
+        tracks = tracks.into_iter().skip(form.start).collect();
+    }
     if tracks.is_empty() {
         return Err(ApiError::bad_request("Playlist ist leer"));
     }
@@ -423,7 +519,7 @@ pub(crate) async fn play_playlist(
         fastrand::shuffle(&mut tracks);
     }
     let channel = voice_channel_for(&state, form.voice_channel.as_deref()).await?;
-    enqueue(&state, tracks, channel, false).await
+    enqueue(&state, tracks, channel, false, None).await
 }
 
 #[derive(Deserialize)]
@@ -433,6 +529,9 @@ pub(crate) struct AddForm {
     soundcloud: bool,
 }
 
+/// Link oder Suche auflösen und anhängen. Wird eine neue (oder leere)
+/// Playlist aus einem Playlist-Link gefüllt, merkt sie sich den Link als
+/// Quelle für „Aktualisieren“.
 pub(crate) async fn add_to_playlist(
     State(state): State<WebState>,
     _admin: Admin,
@@ -445,33 +544,283 @@ pub(crate) async fn add_to_playlist(
         SearchSource::YouTube
     };
     let tracks = resolve(&form.query, source).await?;
+    let was_empty = state
+        .db
+        .playlist_load(&name)
+        .await?
+        .is_none_or(|p| p.tracks.is_empty() && p.source.is_none());
+    let total = state.db.playlist_append(&name, &tracks).await?;
+    let query = form.query.trim();
+    if was_empty && tracks.len() > 1 && is_url(query) {
+        state.db.playlist_set_source(&name, Some(query)).await?;
+    }
+    Ok(Json(json!({ "added": tracks.len(), "total": total })))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct TracksForm {
+    tracks: Vec<TrackInput>,
+}
+
+/// Titel direkt anhängen (aus der Warteschlange oder einer anderen Playlist).
+pub(crate) async fn append_tracks(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+    Json(form): Json<TracksForm>,
+) -> ApiResult {
+    let tracks = TrackInput::into_metas(form.tracks)?;
+    if tracks.is_empty() {
+        return Err(ApiError::bad_request("Keine Titel"));
+    }
     let total = state.db.playlist_append(&name, &tracks).await?;
     Ok(Json(json!({ "added": tracks.len(), "total": total })))
 }
 
 #[derive(Deserialize)]
-pub(crate) struct IndexForm {
-    index: usize,
+#[serde(tag = "op", rename_all = "snake_case")]
+pub(crate) enum OpDto {
+    Remove {
+        indices: Vec<usize>,
+    },
+    Move {
+        indices: Vec<usize>,
+        to: usize,
+    },
+    Insert {
+        index: usize,
+        tracks: Vec<TrackInput>,
+    },
+    Sort {
+        by: SortKey,
+    },
+    Dedupe,
+    Replace {
+        tracks: Vec<TrackInput>,
+    },
 }
 
-pub(crate) async fn remove_from_playlist(
+impl OpDto {
+    fn into_op(self) -> anyhow::Result<PlaylistOp> {
+        Ok(match self {
+            Self::Remove { indices } => PlaylistOp::Remove(indices),
+            Self::Move { indices, to } => PlaylistOp::Move { indices, to },
+            Self::Insert { index, tracks } => PlaylistOp::Insert {
+                index,
+                tracks: TrackInput::into_metas(tracks)?,
+            },
+            Self::Sort { by } => PlaylistOp::Sort(by),
+            Self::Dedupe => PlaylistOp::Dedupe,
+            Self::Replace { tracks } => PlaylistOp::Replace(TrackInput::into_metas(tracks)?),
+        })
+    }
+}
+
+#[derive(Deserialize)]
+pub(crate) struct EditForm {
+    revision: i64,
+    ops: Vec<OpDto>,
+}
+
+/// Bearbeitet eine Playlist. `revision` muss dem aktuellen Stand
+/// entsprechen, sonst 409 (die Oberfläche lädt dann neu).
+pub(crate) async fn edit_playlist(
     State(state): State<WebState>,
     _admin: Admin,
     Path(name): Path<String>,
-    Json(form): Json<IndexForm>,
+    Json(form): Json<EditForm>,
 ) -> ApiResult {
-    let mut tracks = load_playlist(&state, &name).await?;
-    if form.index >= tracks.len() {
-        return Err(ApiError::bad_request("Ungültige Position"));
+    if form.ops.is_empty() || form.ops.len() > 100 {
+        return Err(ApiError::bad_request("Ungültige Bearbeitung"));
     }
-    tracks.remove(form.index);
-    state.db.playlist_save(&name, &tracks).await?;
-    ok()
+    let ops = form
+        .ops
+        .into_iter()
+        .map(OpDto::into_op)
+        .collect::<anyhow::Result<Vec<_>>>()?;
+    let playlist = load_playlist(&state, &name).await?;
+    if playlist.revision != form.revision {
+        return Err(ApiError::from(anyhow::Error::new(PlaylistConflict)));
+    }
+    let mut tracks = playlist.tracks;
+    let affected = apply_ops(&mut tracks, ops)?;
+    state
+        .db
+        .playlist_update(&name, form.revision, &tracks)
+        .await?;
+    playlist_response(&state, &name, json!({ "affected": affected })).await
 }
 
 #[derive(Deserialize)]
 pub(crate) struct NameForm {
     name: String,
+}
+
+/// Umbenennen – eine eingestellte Autoplaylist zieht mit.
+pub(crate) async fn rename_playlist(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+    Json(form): Json<NameForm>,
+) -> ApiResult {
+    let new = validate_name(&form.name)?.to_string();
+    state.db.playlist_rename(&name, &new).await?;
+    state.checks.forget(&name);
+    let mut settings = GuildSettings::load(&state.db, state.guild_id).await?;
+    if settings
+        .autoplaylist
+        .as_deref()
+        .is_some_and(|a| a.eq_ignore_ascii_case(name.trim()))
+    {
+        settings.autoplaylist = Some(new.clone());
+        settings.save(&state.db, state.guild_id).await?;
+    }
+    info!(old = %name, new = %new, "Playlist umbenannt");
+    Ok(Json(json!({ "name": new })))
+}
+
+pub(crate) async fn duplicate_playlist(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+    Json(form): Json<NameForm>,
+) -> ApiResult {
+    let p = load_playlist(&state, &name).await?;
+    state
+        .db
+        .playlist_create(&form.name, &p.tracks, p.source.as_deref())
+        .await?;
+    Ok(Json(json!({ "name": form.name.trim() })))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct SourceForm {
+    source: Option<String>,
+}
+
+pub(crate) async fn set_playlist_source(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+    Json(form): Json<SourceForm>,
+) -> ApiResult {
+    load_playlist(&state, &name).await?;
+    let source = form
+        .source
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty());
+    if let Some(s) = &source
+        && !is_supported_link(s)
+    {
+        return Err(ApiError::bad_request(
+            "Bitte einen YouTube- oder SoundCloud-Playlist-Link angeben",
+        ));
+    }
+    state
+        .db
+        .playlist_set_source(&name, source.as_deref())
+        .await?;
+    ok()
+}
+
+/// Holt neue Titel aus der Quell-Playlist (bereits enthaltene bleiben).
+pub(crate) async fn sync_playlist(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+) -> ApiResult {
+    let p = load_playlist(&state, &name).await?;
+    let source = p
+        .source
+        .ok_or_else(|| ApiError::bad_request("Für diese Playlist ist keine Quelle hinterlegt"))?;
+    let fetched = resolve(&source, SearchSource::YouTube).await?;
+    let known: std::collections::HashSet<String> = p.tracks.iter().map(TrackMeta::key).collect();
+    let mut seen = known.clone();
+    let new: Vec<TrackMeta> = fetched
+        .into_iter()
+        .filter(|t| seen.insert(t.key()))
+        .collect();
+    let added = new.len();
+    if added > 0 {
+        let mut tracks = p.tracks;
+        tracks.extend(new);
+        state.db.playlist_update(&name, p.revision, &tracks).await?;
+    }
+    info!(playlist = %name, added, "Playlist aus Quelle aktualisiert");
+    playlist_response(&state, &name, json!({ "added": added })).await
+}
+
+pub(crate) async fn export_playlist(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+) -> ApiResult {
+    let p = load_playlist(&state, &name).await?;
+    let tracks: Vec<TrackDto> = p.tracks.iter().map(TrackDto::from).collect();
+    Ok(Json(json!({
+        "lemusic_playlist": 1,
+        "name": p.name,
+        "source": p.source,
+        "tracks": tracks,
+    })))
+}
+
+#[derive(Deserialize)]
+pub(crate) struct ImportForm {
+    name: String,
+    #[serde(default)]
+    source: Option<String>,
+    tracks: Vec<TrackInput>,
+}
+
+pub(crate) async fn import_playlist(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Json(form): Json<ImportForm>,
+) -> ApiResult {
+    let tracks = TrackInput::into_metas(form.tracks)?;
+    let source = form.source.filter(|s| is_supported_link(s));
+    state
+        .db
+        .playlist_create(&form.name, &tracks, source.as_deref())
+        .await?;
+    info!(playlist = %form.name.trim(), tracks = tracks.len(), "Playlist importiert");
+    Ok(Json(
+        json!({ "name": form.name.trim(), "total": tracks.len() }),
+    ))
+}
+
+pub(crate) async fn start_check(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+) -> ApiResult {
+    let p = load_playlist(&state, &name).await?;
+    if p.tracks.is_empty() {
+        return Err(ApiError::bad_request("Playlist ist leer"));
+    }
+    state
+        .checks
+        .start(&p.name, p.tracks)
+        .map_err(ApiError::bad_request)?;
+    ok()
+}
+
+pub(crate) async fn check_status(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+) -> ApiResult {
+    Ok(Json(json!(state.checks.status(&name))))
+}
+
+pub(crate) async fn cancel_check(
+    State(state): State<WebState>,
+    _admin: Admin,
+    Path(name): Path<String>,
+) -> ApiResult {
+    state.checks.cancel(&name);
+    ok()
 }
 
 pub(crate) async fn save_queue_as_playlist(

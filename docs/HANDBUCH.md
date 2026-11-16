@@ -72,15 +72,46 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 
 ## Weboberfläche
 
-- **Wiedergabe:** Live-Status, Cover, Fortschritt, Steuerung, Lautstärke, Spulen, Warteschlange sortieren, direkt in einen Sprachkanal abspielen
-- **Playlists:** direkt aus einem YouTube-/SoundCloud-Link anlegen oder aus der Warteschlange speichern (bis 1000 Titel), bearbeiten, abspielen
+- **Wiedergabe:** Live-Status, Cover, Fortschritt, Steuerung, Lautstärke, Spulen, Warteschlange bearbeiten, direkt in einen Sprachkanal abspielen
+- **Playlists:** anlegen, importieren, bearbeiten, prüfen und abspielen (bis 1000 Titel pro Playlist)
 - **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein; DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, Ansagen
 - **System:** yt-dlp aktualisieren, Selbsttest, YouTube-Cookies
 - **Logs** live, **Konto** (Passwort ändern)
 
 Änderungen wirken sofort, ohne Neustart.
 
-**Drag & Drop:** YouTube-/SoundCloud-Links (aus einem Browser-Tab, der Adressleiste oder markiertem Text) lassen sich auf „Hinzufügen“ bzw. die Warteschlange (→ einreihen), auf eine Playlist in der Liste, die geöffnete Playlist oder „Neue Playlist“ ziehen.
+### Titel bearbeiten (Warteschlange und Playlists)
+
+Warteschlange und Playlists funktionieren gleich:
+
+| Was | Wie |
+|---|---|
+| Verschieben | Titel am Griff **⠿** ziehen (Maus oder Finger). Eine Linie zeigt, wo er landet. Am Bildschirmrand scrollt die Liste mit. |
+| Verschieben per Tastatur | Griff anklicken bzw. mit Tab ansteuern, dann **↑ / ↓** |
+| Mehrere auswählen | Häkchen setzen, mit **Shift-Klick** einen ganzen Bereich. Das Häkchen oben wählt alle (gefilterten) Titel. Ziehen nimmt die ganze Auswahl mit. |
+| Auswahl bearbeiten | Leiste über der Liste: Als Nächstes, Ans Ende, Nach oben/unten, In Playlist kopieren/verschieben, Entfernen |
+| Weitere Aktionen | **⋯** am Titel oder **Rechtsklick**: Jetzt spielen, Als Nächstes, Ans Ende, Link kopieren … |
+| Filtern | Suchfeld über der Liste (Titel oder Interpret, mehrere Wörter möglich) |
+| Rückgängig | Nach Entfernen, Leeren, Sortieren oder Duplikate-Entfernen erscheint unten rechts 10 Sekunden lang **Rückgängig** |
+
+**Ziehen zwischen Bereichen:** Während du ziehst, erscheint unten eine Ablage-Leiste:
+- Aus der **Warteschlange** → auf eine Playlist (oder „Neue Playlist“): Titel werden dort gespeichert.
+- Aus einer **Playlist** → „⏭ Als Nächstes“ bzw. „➕ Warteschlange“ (sofort einreihen, ohne neues Laden über yt-dlp) oder auf eine andere Playlist (kopieren, mit gedrückter **Shift**-Taste verschieben). Andere Playlists lassen sich auch direkt in der Liste links als Ziel nutzen.
+
+**Nur in der Warteschlange** (Menü „⋯ Mehr“): Mischen, Duplikate entfernen, alle Autoplaylist-Titel entfernen (nur die Wünsche bleiben), Als Playlist speichern, Leeren (mit Rückgängig). „▶“ am Titel spielt ihn sofort, die restliche Reihenfolge bleibt erhalten. „Bis hierhin überspringen“ springt wie früher und lässt alles davor weg.
+
+**Nur bei Playlists** (Menü „⋯ Mehr“ der geöffneten Playlist):
+- **Umbenennen** (eine eingestellte Autoplaylist zieht automatisch mit) und **Duplizieren**
+- **Sortieren** nach Titel, Interpret oder Dauer, umkehren oder dauerhaft mischen (Rückgängig möglich)
+- **Duplikate entfernen:** Erkennt dasselbe Video auch unter verschiedenen Link-Formen (`youtu.be/…`, `music.youtube.com`, `&list=…`).
+- **Verfügbarkeit prüfen:** Testet jeden Titel im Hintergrund mit yt-dlp (zwei gleichzeitig, damit YouTube nicht drosselt; etwa 1–2 Sekunden pro Titel). Gelöschte, private oder gesperrte Videos werden rot markiert und lassen sich mit „Alle entfernen“ auf einmal löschen. Titel, die gerade nicht prüfbar waren (Netzwerk, Drosselung), werden nur gezählt, nicht markiert. Du kannst die Seite währenddessen verlassen.
+- **Quelle und Aktualisieren:** Wird eine neue Playlist aus einem YouTube-/SoundCloud-Playlist-Link angelegt, merkt sie sich diesen Link. **↻ Aktualisieren** holt später nur die neu hinzugekommenen Titel (Reihenfolge und eigene Änderungen bleiben). Die Quelle lässt sich auch nachträglich festlegen, ändern oder entfernen.
+- **Ab hier abspielen:** reiht die Playlist ab dem gewählten Titel ein.
+- **Exportieren/Importieren:** als JSON-Datei (`*.lemusic.json`), z. B. als Backup oder zum Umziehen. Import über „Aus Datei importieren“ links.
+
+**Konfliktschutz:** Wird eine Playlist gleichzeitig woanders geändert (zweiter Browser-Tab, `/playlist add` in Discord), überschreibt die Weboberfläche nichts. Sie lädt die Playlist neu und meldet das. Die Warteschlange arbeitet mit festen Titel-IDs, deshalb stimmt ein Verschieben auch dann, wenn zwischendurch ein Titel zu Ende geht.
+
+**Drag & Drop von Links:** YouTube-/SoundCloud-Links (aus einem Browser-Tab, der Adressleiste oder markiertem Text) lassen sich auf „Hinzufügen“ bzw. die Warteschlange (→ einreihen), auf eine Playlist in der Liste, die geöffnete Playlist oder „Neue Playlist“ ziehen.
 
 ## Öffentliches Dashboard
 
@@ -166,6 +197,9 @@ cargo clippy --all-targets
 cargo test
 # Image lokal bauen und starten:
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
+# Nur die Weboberfläche ausprobieren – ohne Discord, Wiedergabe simuliert
+# (http://127.0.0.1:8099, admin / demo-passwort):
+cargo run -p lemusic-web --example ui_demo
 ```
 
 Jeder Push auf `main` baut über GitHub Actions ein neues Image (`:latest`, `:main`, `:sha-…`), Tags `v1.2.3` zusätzlich `:1.2.3`.

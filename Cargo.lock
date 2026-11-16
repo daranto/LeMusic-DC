@@ -1902,6 +1902,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "argon2",
+ "fastrand",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -1940,6 +1941,7 @@ dependencies = [
  "lemusic-player",
  "serde",
  "serde_json",
+ "songbird",
  "tokio",
  "tracing",
 ]

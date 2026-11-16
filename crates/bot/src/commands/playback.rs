@@ -70,6 +70,7 @@ pub(super) async fn enqueue_and_reply(
             voice_channel,
             text_channel: Some(ctx.channel_id().get()),
             play_next,
+            before: None,
         })
         .await?;
 

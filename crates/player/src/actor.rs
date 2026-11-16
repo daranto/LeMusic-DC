@@ -31,7 +31,8 @@ use crate::{
     build_track,
     manager::Shared,
     model::{
-        EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEntry, RepeatMode, Snapshot,
+        EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEdit, QueueEntry, RepeatMode,
+        Snapshot,
     },
     resolve::permanent_reason,
 };
@@ -71,6 +72,7 @@ pub(crate) enum Msg {
     Remove(usize, Reply<QueueEntry>),
     Move(usize, usize, Reply<QueueEntry>),
     Clear(Reply<usize>),
+    Edit(QueueEdit, Reply<usize>),
     Snapshot(oneshot::Sender<Snapshot>),
     Restore(Box<SavedState>),
     /// Zustand sichern und Kanal verlassen, Warteschlange bleibt gespeichert.
@@ -91,13 +93,104 @@ fn request_insert_index(queue: &VecDeque<QueueEntry>) -> usize {
     queue.iter().position(|e| e.autoplay).unwrap_or(queue.len())
 }
 
+/// Höchstens so viele entfernte Einträge für „Rückgängig“ merken.
+const MAX_TRASH: usize = 2000;
+
+/// Entfernt alle Einträge, für die `remove` gilt, und merkt sie sich
+/// (mit alter Position) für „Rückgängig“.
+fn take_entries(
+    queue: &mut VecDeque<QueueEntry>,
+    trash: &mut Vec<(usize, QueueEntry)>,
+    mut remove: impl FnMut(&QueueEntry) -> bool,
+) -> usize {
+    let mut removed = Vec::new();
+    let mut kept = VecDeque::with_capacity(queue.len());
+    for (i, e) in queue.drain(..).enumerate() {
+        if remove(&e) {
+            removed.push((i, e));
+        } else {
+            kept.push_back(e);
+        }
+    }
+    *queue = kept;
+    let n = removed.len();
+    if n > 0 {
+        removed.truncate(MAX_TRASH);
+        *trash = removed;
+    }
+    n
+}
+
+/// Wendet eine Bearbeitung an; liefert die Zahl der betroffenen Einträge.
+fn apply_edit(
+    queue: &mut VecDeque<QueueEntry>,
+    trash: &mut Vec<(usize, QueueEntry)>,
+    edit: QueueEdit,
+) -> Result<usize> {
+    use std::collections::HashSet;
+    match edit {
+        QueueEdit::Remove { ids } => {
+            let ids: HashSet<u64> = ids.into_iter().collect();
+            let n = take_entries(queue, trash, |e| ids.contains(&e.id));
+            if n == 0 {
+                bail!("Die Titel sind nicht mehr in der Warteschlange");
+            }
+            Ok(n)
+        }
+        QueueEdit::Move { ids, before, front } => {
+            let set: HashSet<u64> = ids.into_iter().collect();
+            if before.is_some_and(|b| set.contains(&b)) {
+                bail!("Ungültiges Ziel");
+            }
+            if !queue.iter().any(|e| set.contains(&e.id)) {
+                bail!("Die Titel sind nicht mehr in der Warteschlange");
+            }
+            if let Some(b) = before
+                && !front
+                && !queue.iter().any(|e| e.id == b)
+            {
+                bail!("Das Ziel ist nicht mehr in der Warteschlange – bitte neu laden");
+            }
+            let (moved, mut rest): (VecDeque<_>, VecDeque<_>) =
+                queue.drain(..).partition(|e| set.contains(&e.id));
+            let at = match (front, before) {
+                (true, _) => 0,
+                (false, Some(b)) => rest.iter().position(|e| e.id == b).unwrap_or(rest.len()),
+                (false, None) => rest.len(),
+            };
+            let n = moved.len();
+            for (offset, e) in moved.into_iter().enumerate() {
+                rest.insert(at + offset, e);
+            }
+            *queue = rest;
+            Ok(n)
+        }
+        QueueEdit::Restore => {
+            if trash.is_empty() {
+                bail!("Nichts zum Wiederherstellen");
+            }
+            let n = trash.len();
+            for (i, e) in trash.drain(..) {
+                let i = i.min(queue.len());
+                queue.insert(i, e);
+            }
+            Ok(n)
+        }
+        QueueEdit::Dedupe => {
+            let mut seen = HashSet::new();
+            Ok(take_entries(queue, trash, |e| !seen.insert(e.meta.key())))
+        }
+        QueueEdit::RemoveAutoplay => Ok(take_entries(queue, trash, |e| e.autoplay)),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::{collections::VecDeque, sync::Arc};
 
     use lemusic_core::TrackMeta;
 
-    use super::{QueueEntry, request_insert_index};
+    use super::{QueueEdit, QueueEntry, apply_edit, request_insert_index};
     use crate::resolve::permanent_reason;
 
     fn entry(id: u64, autoplay: bool) -> QueueEntry {
@@ -129,12 +222,103 @@ mod tests {
         assert_eq!(request_insert_index(&VecDeque::new()), 0);
     }
 
+    fn ids(q: &VecDeque<QueueEntry>) -> Vec<u64> {
+        q.iter().map(|e| e.id).collect()
+    }
+
+    #[test]
+    fn queue_edits_by_id() -> anyhow::Result<()> {
+        let mut q: VecDeque<_> = (1..=5).map(|i| entry(i, i > 3)).collect();
+        let mut trash = Vec::new();
+        // 2 und 4 vor 1
+        apply_edit(
+            &mut q,
+            &mut trash,
+            QueueEdit::Move {
+                ids: vec![4, 2],
+                before: Some(1),
+                front: false,
+            },
+        )?;
+        assert_eq!(ids(&q), [2, 4, 1, 3, 5]);
+        // 5 nach vorne, 2 ans Ende
+        apply_edit(
+            &mut q,
+            &mut trash,
+            QueueEdit::Move {
+                ids: vec![5],
+                before: None,
+                front: true,
+            },
+        )?;
+        apply_edit(
+            &mut q,
+            &mut trash,
+            QueueEdit::Move {
+                ids: vec![2],
+                before: None,
+                front: false,
+            },
+        )?;
+        assert_eq!(ids(&q), [5, 4, 1, 3, 2]);
+        // Ziel weg → Fehler, nichts verändert
+        assert!(
+            apply_edit(
+                &mut q,
+                &mut trash,
+                QueueEdit::Move {
+                    ids: vec![1],
+                    before: Some(99),
+                    front: false
+                }
+            )
+            .is_err()
+        );
+        assert_eq!(ids(&q), [5, 4, 1, 3, 2]);
+        // Entfernen + Rückgängig stellt Positionen wieder her
+        assert_eq!(
+            apply_edit(&mut q, &mut trash, QueueEdit::Remove { ids: vec![4, 3] })?,
+            2
+        );
+        assert_eq!(ids(&q), [5, 1, 2]);
+        apply_edit(&mut q, &mut trash, QueueEdit::Restore)?;
+        assert_eq!(ids(&q), [5, 4, 1, 3, 2]);
+        assert!(apply_edit(&mut q, &mut trash, QueueEdit::Restore).is_err());
+        // Autoplaylist-Titel entfernen (4 und 5)
+        assert_eq!(
+            apply_edit(&mut q, &mut trash, QueueEdit::RemoveAutoplay)?,
+            2
+        );
+        assert_eq!(ids(&q), [1, 3, 2]);
+        Ok(())
+    }
+
+    #[test]
+    fn dedupe_keeps_first() -> anyhow::Result<()> {
+        let mut q: VecDeque<_> = [entry(1, false), entry(2, false), entry(1, true)]
+            .into_iter()
+            .enumerate()
+            .map(|(i, mut e)| {
+                e.id = i as u64 + 10;
+                e
+            })
+            .collect();
+        let mut trash = Vec::new();
+        assert_eq!(apply_edit(&mut q, &mut trash, QueueEdit::Dedupe)?, 1);
+        assert_eq!(ids(&q), [10, 11]);
+        Ok(())
+    }
+
     #[test]
     fn recognizes_permanent_errors() {
         let age = "Stream ist leer – [youtube] OT2IKn6ycbA: Sign in to confirm your age. This video may be inappropriate";
         assert_eq!(
             permanent_reason(age),
             Some("altersbeschränkt (dafür sind YouTube-Cookies nötig)")
+        );
+        assert_eq!(
+            permanent_reason("[youtube] Zm7lGk6bnkM: This video is unavailable"),
+            Some("nicht verfügbar")
         );
         assert_eq!(permanent_reason("Stream liefert keine Daten"), None);
         assert_eq!(permanent_reason("Stream endete vorzeitig bei 1:23"), None);
@@ -195,6 +379,8 @@ pub(crate) struct Actor {
     next_id: u64,
     dirty: bool,
     last_save: Instant,
+    /// Zuletzt entfernte Einträge (alte Position) für „Rückgängig“.
+    trash: Vec<(usize, QueueEntry)>,
 }
 
 impl Actor {
@@ -219,6 +405,7 @@ impl Actor {
             next_id: 1,
             dirty: false,
             last_save: Instant::now(),
+            trash: Vec::new(),
         }
     }
 
@@ -313,7 +500,8 @@ impl Actor {
                     .queue
                     .remove(index)
                     .ok_or_else(|| anyhow!("Kein Track an Position {}", index + 1));
-                if r.is_ok() {
+                if let Ok(entry) = &r {
+                    self.trash = vec![(index, entry.clone())];
                     self.dirty = true;
                     self.prepare_next().await;
                 }
@@ -333,11 +521,18 @@ impl Actor {
                 let _ = reply.send(r);
             }
             Msg::Clear(reply) => {
-                let n = self.queue.len();
-                self.queue.clear();
+                let n = take_entries(&mut self.queue, &mut self.trash, |_| true);
                 self.drop_prepared();
                 self.dirty = true;
                 let _ = reply.send(Ok(n));
+            }
+            Msg::Edit(edit, reply) => {
+                let r = apply_edit(&mut self.queue, &mut self.trash, edit);
+                if r.is_ok() {
+                    self.dirty = true;
+                    self.prepare_next().await;
+                }
+                let _ = reply.send(r);
             }
             Msg::Snapshot(reply) => {
                 let _ = reply.send(self.snapshot());
@@ -517,10 +712,13 @@ impl Actor {
 
         // Vorne einreihen, sonst hinter die anderen Wünsche, aber vor die
         // Autoplaylist – ein Wunsch soll nie hinter ihr warten.
-        let index = if req.play_next {
-            0
-        } else {
-            request_insert_index(&self.queue)
+        let index = match req
+            .before
+            .and_then(|b| self.queue.iter().position(|e| e.id == b))
+        {
+            Some(i) => i,
+            None if req.play_next => 0,
+            None => request_insert_index(&self.queue),
         };
         for (offset, entry) in entries.into_iter().enumerate() {
             self.queue.insert(index + offset, entry);
