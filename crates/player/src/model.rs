@@ -116,6 +116,19 @@ pub struct EnqueueRequest {
     pub before: Option<u64>,
 }
 
+/// Ergebnis eines automatischen Beitritts.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum AutoJoinOutcome {
+    /// Neu beigetreten; ggf. Name der gestarteten Autoplaylist.
+    Joined(Option<String>),
+    /// War allein in einem anderen Kanal und ist umgezogen (Wiedergabe läuft weiter).
+    Moved,
+    /// Schon in diesem Kanal.
+    AlreadyThere,
+    /// In einem anderen Kanal mit Zuhörern – bleibt dort.
+    Busy,
+}
+
 /// Bearbeitung der Warteschlange über Eintrags-IDs (stabil, auch wenn
 /// zwischendurch ein Track zu Ende geht).
 #[derive(Debug, Clone, Deserialize)]

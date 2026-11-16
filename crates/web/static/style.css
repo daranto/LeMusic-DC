@@ -290,3 +290,9 @@ label.file-btn { flex-direction: row; align-self: flex-start; color: var(--text)
   .tl-list li { gap: 6px; padding: 8px 2px; }
   .tl-bulk { top: 100px; }
 }
+
+/* Kanalauswahl (Auto-Join) */
+.channel-picks { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; margin: 0; }
+.channel-picks legend { font-size: .9rem; color: var(--muted); padding: 0 4px; }
+.channel-picks .picks { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px 12px; }
+.channel-picks:disabled { opacity: .5; }

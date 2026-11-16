@@ -72,7 +72,11 @@ pub async fn build_client(config: &EnvConfig, deps: BotDeps) -> Result<serenity:
                 })
             },
             event_handler: |framework, event| {
-                Box::pin(events::on_event(event, framework.user_data))
+                Box::pin(events::on_event(
+                    framework.serenity_context,
+                    event,
+                    framework.user_data,
+                ))
             },
             ..Default::default()
         })

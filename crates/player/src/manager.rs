@@ -14,8 +14,8 @@ use tracing::{error, info, warn};
 use crate::{
     actor::{Actor, Msg, Reply, SavedState, state_key},
     model::{
-        EnqueueOutcome, EnqueueRequest, PlayerEvent, QueueEdit, QueueEntry, RepeatMode, Snapshot,
-        VoicePresence,
+        AutoJoinOutcome, EnqueueOutcome, EnqueueRequest, PlayerEvent, QueueEdit, QueueEntry,
+        RepeatMode, Snapshot, VoicePresence,
     },
 };
 
@@ -189,6 +189,11 @@ impl Player {
     ) -> Result<Option<String>> {
         self.request(|r| Msg::Join(voice_channel, text_channel, r))
             .await
+    }
+    /// Automatisch beitreten, weil jemand den Kanal betreten hat. Ist der Bot
+    /// woanders allein, zieht er um; hat er dort Zuhörer, bleibt er.
+    pub async fn auto_join(&self, voice_channel: u64) -> Result<AutoJoinOutcome> {
+        self.request(|r| Msg::AutoJoin(voice_channel, r)).await
     }
     /// Überspringt den aktuellen Track; liefert ihn zurück.
     pub async fn skip(&self) -> Result<Option<QueueEntry>> {

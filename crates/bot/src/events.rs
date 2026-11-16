@@ -1,18 +1,26 @@
 //! Discord-Gateway-Events und Weiterleitung von Player-Ereignissen.
 
-use std::{collections::HashMap, sync::atomic::AtomicBool, sync::atomic::Ordering};
+use std::{
+    collections::HashMap,
+    sync::atomic::{AtomicBool, Ordering},
+    time::Duration,
+};
 
 use lemusic_core::{Db, GuildSettings, SettingsStore};
-use lemusic_player::{PlayerEvent, PlayerManager};
+use lemusic_player::{AutoJoinOutcome, PlayerEvent, PlayerManager};
 use poise::serenity_prelude::{self as serenity, CreateMessage};
 use tokio::sync::broadcast::error::RecvError;
 use tracing::{info, warn};
 
-use crate::{Data, Error, embeds};
+use crate::{Data, Error, embeds, presence::CachePresence};
 
 static RESTORED: AtomicBool = AtomicBool::new(false);
 
-pub async fn on_event(event: &serenity::FullEvent, data: &Data) -> Result<(), Error> {
+pub async fn on_event(
+    ctx: &serenity::Context,
+    event: &serenity::FullEvent,
+    data: &Data,
+) -> Result<(), Error> {
     match event {
         serenity::FullEvent::Ready { .. } | serenity::FullEvent::Resume { .. } => {
             data.health.set_discord_connected(true);
@@ -28,10 +36,141 @@ pub async fn on_event(event: &serenity::FullEvent, data: &Data) -> Result<(), Er
         // Wiedergabe vom letzten Lauf sicher fortgesetzt werden.
         serenity::FullEvent::CacheReady { .. } if !RESTORED.swap(true, Ordering::SeqCst) => {
             data.players.restore_all().await;
+            spawn_startup_auto_join(
+                ctx.clone(),
+                data.players.clone(),
+                data.db.clone(),
+                data.guild_id,
+            );
+        }
+        serenity::FullEvent::VoiceStateUpdate { old, new } => {
+            on_voice_state(ctx, data, old.as_ref(), new);
         }
         _ => {}
     }
     Ok(())
+}
+
+/// Jemand hat einen Sprachkanal betreten → ggf. automatisch beitreten.
+fn on_voice_state(
+    ctx: &serenity::Context,
+    data: &Data,
+    old: Option<&serenity::VoiceState>,
+    new: &serenity::VoiceState,
+) {
+    if new.guild_id != Some(data.guild_id) || new.user_id == ctx.cache.current_user().id {
+        return;
+    }
+    let Some(channel) = new.channel_id else {
+        return;
+    };
+    if old.and_then(|o| o.channel_id) == Some(channel) {
+        return; // nur Stummschalten o. Ä.
+    }
+    let is_bot = new
+        .member
+        .as_ref()
+        .map(|m| m.user.bot)
+        .unwrap_or_else(|| ctx.cache.user(new.user_id).map(|u| u.bot).unwrap_or(false));
+    if is_bot || is_afk_channel(ctx, data.guild_id, channel) {
+        return;
+    }
+    let players = data.players.clone();
+    let db = data.db.clone();
+    let guild_id = data.guild_id.get();
+    tokio::spawn(async move {
+        let allowed = GuildSettings::load(&db, guild_id)
+            .await
+            .map(|s| s.auto_join_allowed(channel.get()))
+            .unwrap_or(false);
+        if allowed {
+            auto_join(
+                &players,
+                guild_id,
+                channel.get(),
+                "Nutzer hat den Kanal betreten",
+            )
+            .await;
+        }
+    });
+}
+
+fn is_afk_channel(
+    ctx: &serenity::Context,
+    guild_id: serenity::GuildId,
+    channel: serenity::ChannelId,
+) -> bool {
+    ctx.cache.guild(guild_id).is_some_and(|g| {
+        g.afk_metadata
+            .as_ref()
+            .is_some_and(|afk| afk.afk_channel_id == channel)
+    })
+}
+
+async fn auto_join(players: &PlayerManager, guild_id: u64, channel: u64, reason: &str) {
+    match players.player(guild_id).auto_join(channel).await {
+        Ok(AutoJoinOutcome::Joined(autoplaylist)) => {
+            info!(channel, reason, autoplaylist = ?autoplaylist, "Automatisch beigetreten");
+        }
+        Ok(AutoJoinOutcome::Moved) => {
+            info!(
+                channel,
+                reason, "Automatisch in den Kanal mit Zuhörern umgezogen"
+            );
+        }
+        Ok(AutoJoinOutcome::AlreadyThere | AutoJoinOutcome::Busy) => {}
+        Err(e) => warn!(channel, error = %e, "Automatischer Beitritt fehlgeschlagen"),
+    }
+}
+
+/// Nach dem Start: Läuft nichts (keine Wiederherstellung) und sitzt schon
+/// jemand in einem erlaubten Kanal, dorthin beitreten.
+fn spawn_startup_auto_join(
+    ctx: serenity::Context,
+    players: PlayerManager,
+    db: Db,
+    guild_id: serenity::GuildId,
+) {
+    tokio::spawn(async move {
+        // Der Wiederherstellung den Vortritt lassen.
+        tokio::time::sleep(Duration::from_secs(8)).await;
+        let Ok(settings) = GuildSettings::load(&db, guild_id.get()).await else {
+            return;
+        };
+        if !settings.auto_join {
+            return;
+        }
+        let player = players.player(guild_id.get());
+        if player
+            .snapshot()
+            .await
+            .is_ok_and(|s| s.voice_channel.is_some())
+        {
+            return;
+        }
+        let channels: Vec<serenity::ChannelId> = match ctx.cache.guild(guild_id) {
+            Some(g) => g.channels.keys().copied().collect(),
+            None => return,
+        };
+        let best = channels
+            .into_iter()
+            .filter(|c| settings.auto_join_allowed(c.get()) && !is_afk_channel(&ctx, guild_id, *c))
+            .filter_map(|c| {
+                CachePresence::humans_in(&ctx.cache, guild_id, c)
+                    .filter(|&n| n > 0)
+                    .map(|n| (n, c))
+            })
+            .max_by_key(|(n, _)| *n);
+        if let Some((_, channel)) = best {
+            auto_join(
+                &players,
+                guild_id.get(),
+                channel.get(),
+                "nach dem Start schon jemand da",
+            )
+            .await;
+        }
+    });
 }
 
 /// Postet Player-Ereignisse („Spiele jetzt“, Fehler …) im Textkanal.

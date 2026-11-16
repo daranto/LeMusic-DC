@@ -1116,8 +1116,20 @@ async function loadSettings() {
     f.skip_ratio.value = guild.skip_ratio;
     f.max_track_mins.value = Math.round(guild.max_track_secs / 60);
     f.announce_tracks.checked = guild.announce_tracks;
+    f.auto_join.checked = guild.auto_join;
+    const picks = $("#auto-join-channels .picks");
+    const chosen = new Set(guild.auto_join_channels ?? []);
+    picks.innerHTML = (g?.voice_channels ?? []).map((c) => `
+      <label class="check"><input type="checkbox" data-channel="${esc(c.id)}" ${chosen.has(c.id) ? "checked" : ""}> ${esc(c.name)}</label>`).join("")
+      || `<span class="muted">Sprachkanäle erscheinen, sobald der Bot mit Discord verbunden ist.</span>`;
+    updateAutoJoin();
   }
 }
+
+function updateAutoJoin() {
+  $("#auto-join-channels").disabled = !$("#guild-settings").auto_join.checked;
+}
+$("#guild-settings [name=auto_join]").addEventListener("change", updateAutoJoin);
 
 function updatePublicNote() {
   const f = $("#bot-settings");
@@ -1156,6 +1168,8 @@ $("#guild-settings").addEventListener("submit", (ev) => {
     max_track_secs: (d.max_track_mins ?? 0) * 60,
     autoplaylist: d.autoplaylist || null,
     announce_tracks: d.announce_tracks,
+    auto_join: d.auto_join,
+    auto_join_channels: $$("#auto-join-channels input[data-channel]:checked").map((i) => i.dataset.channel),
   };
   run($("button", ev.target), () => api("PUT", "/settings/guild", body), "Gespeichert").then((r) => {
     if (r) state.autoplaylist = body.autoplaylist;

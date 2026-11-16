@@ -68,13 +68,20 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 
 **Wünsche vor Autoplaylist:** Läuft die Autoplaylist, kommt jeder Wunsch (Discord, öffentliches Dashboard, Weboberfläche) hinter die anderen Wünsche, aber vor die restlichen Autoplaylist-Titel – läuft nur die Autoplaylist, spielt der Wunsch also als Nächstes.
 
+**Automatisch beitreten** (Einstellungen → Server): Betritt jemand einen Sprachkanal, kommt der Bot dazu – wie `/join`, also mit Autoplaylist, falls eingestellt. Unter „Erlaubte Sprachkanäle“ lässt sich das auf bestimmte Kanäle beschränken (keiner ausgewählt = alle; „Nur in Sprachkanal“ hat Vorrang). Regeln:
+- Ist der Bot schon in einem Kanal mit Zuhörern, bleibt er dort.
+- Sitzt er allein in einem anderen Kanal (z. B. pausiert, weil alle gegangen sind), zieht er um und spielt den aktuellen Titel an derselben Stelle weiter.
+- Bots und der AFK-Kanal lösen nichts aus.
+- Nach einem Neustart/Update ohne laufende Wiedergabe tritt er dem erlaubten Kanal bei, in dem die meisten Leute sitzen.
+- Ohne Autoplaylist verlässt er den Kanal wieder nach dem Inaktivitäts-Timeout.
+
 **DJ** = Admins, Server-Manager und Mitglieder mit der DJ-Rolle. Ist keine DJ-Rolle eingestellt, sind alle DJ.
 
 ## Weboberfläche
 
 - **Wiedergabe:** Live-Status, Cover, Fortschritt, Steuerung, Lautstärke, Spulen, Warteschlange bearbeiten, direkt in einen Sprachkanal abspielen
 - **Playlists:** anlegen, importieren, bearbeiten, prüfen und abspielen (bis 1000 Titel pro Playlist)
-- **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein; DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, Ansagen
+- **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein; DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, automatisch beitreten, Ansagen
 - **System:** yt-dlp aktualisieren, Selbsttest, YouTube-Cookies
 - **Logs** live, **Konto** (Passwort ändern)
 

@@ -19,6 +19,7 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
 *Discord*
 - `/play`, `/search`, `/skip` (mit Abstimmung), `/queue`, `/seek`, `/repeat`, `/volume`, `/playlist` …
 - `/join` holt den Bot in deinen Kanal und startet die Autoplaylist; `/dashboard` postet den Link zum öffentlichen Dashboard
+- **Automatisch beitreten:** Betritt jemand einen (erlaubten) Sprachkanal, kommt der Bot dazu; sitzt er woanders allein, zieht er samt laufendem Titel um
 - „Spiele jetzt“-Ansagen im festgelegten Kanal, mit Knopf **🎵 Song hinzufügen**
 
 *Weboberfläche (Admin-Login)*
@@ -75,6 +76,7 @@ A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust
 *Discord*
 - `/play`, `/search`, `/skip` (with voting), `/queue`, `/seek`, `/repeat`, `/volume`, `/playlist` …
 - `/join` summons the bot and starts the autoplaylist; `/dashboard` posts the public dashboard link
+- **Auto-join:** when someone enters an (allowed) voice channel the bot follows; if it sits alone elsewhere, it moves over and keeps playing the current track
 - "Now playing" announcements in a configured channel, with a **🎵 Song hinzufügen** ("add a song") button
 
 *Web UI (admin login)*

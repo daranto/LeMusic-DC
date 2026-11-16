@@ -138,6 +138,10 @@ pub struct GuildSettingsDto {
     pub announce_tracks: bool,
     #[serde(default)]
     pub announce_channel: Option<String>,
+    #[serde(default)]
+    pub auto_join: bool,
+    #[serde(default)]
+    pub auto_join_channels: Vec<String>,
 }
 
 fn id_to_string(id: Option<u64>) -> Option<String> {
@@ -162,6 +166,8 @@ impl From<&GuildSettings> for GuildSettingsDto {
             autoplaylist: s.autoplaylist.clone(),
             announce_tracks: s.announce_tracks,
             announce_channel: id_to_string(s.announce_channel),
+            auto_join: s.auto_join,
+            auto_join_channels: s.auto_join_channels.iter().map(u64::to_string).collect(),
         }
     }
 }
@@ -180,6 +186,12 @@ impl GuildSettingsDto {
                 .filter(|s| !s.is_empty()),
             announce_tracks: self.announce_tracks,
             announce_channel: parse_id(self.announce_channel, "Ansage-Kanal-ID")?,
+            auto_join: self.auto_join,
+            auto_join_channels: self
+                .auto_join_channels
+                .into_iter()
+                .filter_map(|id| parse_id(Some(id), "Sprachkanal-ID").transpose())
+                .collect::<Result<Vec<_>>>()?,
         })
     }
 }

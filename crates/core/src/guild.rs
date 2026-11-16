@@ -25,6 +25,10 @@ pub struct GuildSettings {
     /// Fester Kanal für alle Ansagen. `None` = Kanal des letzten Befehls
     /// bzw. der erlaubte Befehlskanal.
     pub announce_channel: Option<u64>,
+    /// Automatisch beitreten, sobald jemand einen Sprachkanal betritt.
+    pub auto_join: bool,
+    /// Sprachkanäle für das automatische Beitreten. Leer = alle.
+    pub auto_join_channels: Vec<u64>,
 }
 
 impl Default for GuildSettings {
@@ -38,6 +42,8 @@ impl Default for GuildSettings {
             autoplaylist: None,
             announce_tracks: true,
             announce_channel: None,
+            auto_join: false,
+            auto_join_channels: Vec::new(),
         }
     }
 }
@@ -53,6 +59,13 @@ impl GuildSettings {
         self.announce_channel
             .or(last_command_channel)
             .or(self.text_channel)
+    }
+
+    /// Darf der Bot diesem Kanal automatisch beitreten?
+    pub fn auto_join_allowed(&self, channel: u64) -> bool {
+        self.auto_join
+            && self.voice_channel.is_none_or(|only| only == channel)
+            && (self.auto_join_channels.is_empty() || self.auto_join_channels.contains(&channel))
     }
 
     pub fn validate(&self) -> Result<()> {
@@ -75,6 +88,22 @@ impl GuildSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn auto_join_rules() {
+        let mut s = GuildSettings::default();
+        assert!(!s.auto_join_allowed(1));
+        s.auto_join = true;
+        assert!(s.auto_join_allowed(1) && s.auto_join_allowed(2));
+        s.auto_join_channels = vec![2, 3];
+        assert!(!s.auto_join_allowed(1) && s.auto_join_allowed(2));
+        // „Nur in Sprachkanal“ hat Vorrang.
+        s.voice_channel = Some(3);
+        assert!(!s.auto_join_allowed(2) && s.auto_join_allowed(3));
+        // Ältere gespeicherte Einstellungen ohne die Felder bleiben lesbar.
+        let old: GuildSettings = serde_json::from_str(r#"{"skip_ratio":0.5}"#).unwrap_or_default();
+        assert!(!old.auto_join && old.auto_join_channels.is_empty());
+    }
 
     #[test]
     fn announce_target_priority() {

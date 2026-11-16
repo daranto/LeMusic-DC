@@ -31,8 +31,8 @@ use crate::{
     build_track,
     manager::Shared,
     model::{
-        EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEdit, QueueEntry, RepeatMode,
-        Snapshot,
+        AutoJoinOutcome, EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEdit,
+        QueueEntry, RepeatMode, Snapshot,
     },
     resolve::permanent_reason,
 };
@@ -60,6 +60,7 @@ pub(crate) enum Msg {
     /// Sprachkanal betreten, ohne etwas abzuspielen (Sprachkanal, Textkanal).
     /// Antwort: Name der Autoplaylist, falls sie gestartet wurde.
     Join(u64, Option<u64>, Reply<Option<String>>),
+    AutoJoin(u64, Reply<AutoJoinOutcome>),
     Skip(Reply<Option<QueueEntry>>),
     SkipTo(usize, Reply<()>),
     Pause(Reply<()>),
@@ -442,6 +443,10 @@ impl Actor {
                 let r = self.join(channel, text_channel).await;
                 let _ = reply.send(r);
             }
+            Msg::AutoJoin(channel, reply) => {
+                let r = self.auto_join(channel).await;
+                let _ = reply.send(r);
+            }
             Msg::Skip(reply) => {
                 let skipped = self.current.as_ref().map(|c| c.entry.clone());
                 let r = match skipped {
@@ -737,6 +742,51 @@ impl Actor {
             self.prepare_next().await;
             Ok(EnqueueOutcome { added, position })
         }
+    }
+
+    /// Automatischer Beitritt: nur, wenn der Bot nirgends ist oder in seinem
+    /// Kanal niemand mehr zuhört – dann zieht er samt Wiedergabe um.
+    async fn auto_join(&mut self, channel: u64) -> Result<AutoJoinOutcome> {
+        if self.call.is_none() {
+            return Ok(AutoJoinOutcome::Joined(self.join(channel, None).await?));
+        }
+        let Some(old) = self.voice_channel else {
+            return Ok(AutoJoinOutcome::Joined(self.join(channel, None).await?));
+        };
+        if old == channel {
+            return Ok(AutoJoinOutcome::AlreadyThere);
+        }
+        if self.listeners(old) != Some(0) {
+            return Ok(AutoJoinOutcome::Busy);
+        }
+        let Some(current) = self.current.take() else {
+            // Nichts läuft – einfach wechseln.
+            return Ok(AutoJoinOutcome::Joined(self.join(channel, None).await?));
+        };
+        // Wiedergabe an derselben Stelle im neuen Kanal fortsetzen.
+        let _ = current.handle.stop();
+        self.drop_prepared();
+        let keep_paused = self.paused && !self.auto_paused;
+        self.paused = false;
+        self.auto_paused = false;
+        self.alone_since = None;
+        if let Err(e) = self.ensure_joined(channel).await {
+            self.queue.push_front(current.entry);
+            self.dirty = true;
+            return Err(e);
+        }
+        info!(
+            guild_id = self.guild_id,
+            from = old,
+            to = channel,
+            "Ziehe mit der Wiedergabe um"
+        );
+        self.start(current.entry, current.position, current.retries, false)
+            .await?;
+        if keep_paused {
+            let _ = self.set_paused(true);
+        }
+        Ok(AutoJoinOutcome::Moved)
     }
 
     /// Betritt einen Sprachkanal (bzw. wechselt ihn, solange nichts läuft).

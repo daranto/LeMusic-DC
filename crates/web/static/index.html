@@ -140,6 +140,14 @@
             <label>Vote-Skip-Quote (%)<input name="skip_ratio" type="number" min="0" max="100" required></label>
             <label>Maximale Track-Länge (Minuten, 0 = unbegrenzt)<input name="max_track_mins" type="number" min="0" required></label>
             <label>Autoplaylist (läuft bei leerer Warteschlange)<select name="autoplaylist"></select></label>
+            <h3 class="subhead">Automatisch beitreten</h3>
+            <label class="check"><input type="checkbox" name="auto_join"> Beitreten, sobald jemand einen Sprachkanal betritt</label>
+            <fieldset class="channel-picks" id="auto-join-channels">
+              <legend>Erlaubte Sprachkanäle <span class="muted">(keiner ausgewählt = alle)</span></legend>
+              <div class="picks"></div>
+            </fieldset>
+            <p class="drop-note">Der Bot kommt nur, wenn er nirgends ist oder in seinem Kanal niemand mehr zuhört – dann zieht er samt laufendem Titel um. Mit Autoplaylist startet diese automatisch. AFK-Kanal und Bots werden ignoriert.</p>
+            <h3 class="subhead">Ansagen</h3>
             <label class="check"><input type="checkbox" name="announce_tracks"> „Spiele jetzt“ ankündigen</label>
             <label>Ansagen in Kanal (auch bei Start über Web/Autoplaylist)<select name="announce_channel"></select></label>
             <button class="btn primary" type="submit">Speichern</button>
