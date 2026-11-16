@@ -32,6 +32,10 @@ pub struct BotSettings {
     /// Adresse, unter der die Weboberfläche von außen erreichbar ist (z. B.
     /// `http://192.168.1.10:8080`). Für Links in Discord; leer = keine Links.
     pub public_url: String,
+    /// yt-dlp täglich automatisch aktualisieren.
+    pub ytdlp_auto_update: bool,
+    /// Uhrzeit dafür („HH:MM“, Zeitzone aus `TZ`, sonst Europe/Berlin).
+    pub ytdlp_update_time: String,
 }
 
 impl Default for BotSettings {
@@ -44,8 +48,21 @@ impl Default for BotSettings {
             public_enabled: false,
             public_pin: String::new(),
             public_url: String::new(),
+            ytdlp_auto_update: true,
+            ytdlp_update_time: "04:00".into(),
         }
     }
+}
+
+/// „HH:MM“ mit gültigen Werten.
+fn valid_time(s: &str) -> bool {
+    let Some((h, m)) = s.trim().split_once(':') else {
+        return false;
+    };
+    let ok = |part: &str, max: u8, min_len: usize| {
+        (min_len..=2).contains(&part.len()) && part.parse::<u8>().is_ok_and(|v| v < max)
+    };
+    ok(h, 24, 1) && ok(m, 60, 2)
 }
 
 impl BotSettings {
@@ -64,6 +81,9 @@ impl BotSettings {
         let url = self.public_url.trim();
         if !url.is_empty() && !(url.starts_with("http://") || url.starts_with("https://")) {
             bail!("Die öffentliche Adresse muss mit http:// oder https:// beginnen");
+        }
+        if !valid_time(&self.ytdlp_update_time) {
+            bail!("Uhrzeit für das yt-dlp-Update bitte als HH:MM angeben (z. B. 04:00)");
         }
         if self.status_text.chars().count() > Self::MAX_STATUS_LEN {
             bail!(

@@ -96,6 +96,7 @@ async fn run(logs: LogBuffer) -> Result<()> {
         config.guild_id,
     );
     spawn_session_cleanup(db.clone());
+    lemusic_player::ytdlp::spawn_daily(db.clone(), settings.clone());
     let mut web_shutdown = shutdown_rx.clone();
     let web = tokio::spawn(lemusic_web::serve(config.web_bind, web_state, async move {
         let _ = web_shutdown.wait_for(|stop| *stop).await;

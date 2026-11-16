@@ -204,6 +204,8 @@ async function refreshOverview() {
       `<span class="chip">⏱ Laufzeit ${esc(uptime)}</span>` +
       `<span class="chip">v${esc(o.health.version)}</span>`;
     $("#ytdlp-version").textContent = o.ytdlp_version;
+    state.timeZone = o.time_zone;
+    renderYtdlpLast(o.ytdlp_last_update);
     const badge = $("#cookies-badge");
     badge.textContent = o.cookies ? "aktiv" : "keine";
     badge.classList.toggle("on", o.cookies);
@@ -1097,7 +1099,10 @@ async function loadSettings() {
     f.public_enabled.checked = bot.public_enabled;
     f.public_pin.value = bot.public_pin;
     f.public_url.value = bot.public_url;
+    f.ytdlp_auto_update.checked = bot.ytdlp_auto_update;
+    f.ytdlp_update_time.value = bot.ytdlp_update_time;
     updatePublicNote();
+    updateYtdlpNote();
   }
   if (guild) {
     const f = $("#guild-settings");
@@ -1125,6 +1130,22 @@ async function loadSettings() {
     updateAutoJoin();
   }
 }
+
+function renderYtdlpLast(s) {
+  const el = $("#ytdlp-last");
+  el.textContent = s
+    ? `Letzte Prüfung (${s.trigger}): ${s.at} – ${s.ok ? "✅" : "❌"} ${s.message}`
+    : "Noch keine Prüfung seit dem Update auf diese Version.";
+}
+
+function updateYtdlpNote() {
+  const f = $("#bot-settings");
+  f.ytdlp_update_time.disabled = !f.ytdlp_auto_update.checked;
+  $("#ytdlp-schedule-note").textContent = f.ytdlp_auto_update.checked
+    ? `Zeitzone: ${state.timeZone || "Europe/Berlin"} (änderbar über die Umgebungsvariable TZ). Zusätzlich wird bei jedem Containerstart aktualisiert.`
+    : "Aus – dann nur beim Containerstart oder über System → „Jetzt aktualisieren“.";
+}
+$("#bot-settings [name=ytdlp_auto_update]").addEventListener("change", updateYtdlpNote);
 
 function updateAutoJoin() {
   $("#auto-join-channels").disabled = !$("#guild-settings").auto_join.checked;
@@ -1183,7 +1204,7 @@ $("#guild-settings").addEventListener("submit", (ev) => {
 $("#btn-ytdlp-update").addEventListener("click", (ev) => {
   const btn = ev.currentTarget;
   btn.textContent = "Aktualisiere …";
-  run(btn, () => api("POST", "/system/ytdlp-update"), (r) => `yt-dlp ${r.version}`).finally(() => {
+  run(btn, () => api("POST", "/system/ytdlp-update"), (r) => `yt-dlp ${r.version} – ${r.status.message}`).finally(() => {
     btn.textContent = "Jetzt aktualisieren";
     refreshOverview();
   });

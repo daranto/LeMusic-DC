@@ -19,12 +19,11 @@ use lemusic_core::{
 };
 use lemusic_player::{
     EnqueueRequest, QueueEdit, RepeatMode, SearchSource, is_supported_link, is_url, resolve,
-    selftest,
+    selftest, ytdlp,
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
-use tokio::process::Command;
-use tracing::{info, warn};
+use tracing::info;
 
 use crate::{
     WebState,
@@ -124,18 +123,9 @@ async fn ytdlp_version(force: bool) -> String {
     {
         return v.clone();
     }
-    let output = tokio::time::timeout(
-        Duration::from_secs(10),
-        Command::new("yt-dlp")
-            .arg("--version")
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await;
-    let version = match output {
-        Ok(Ok(o)) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
-        _ => "nicht verfügbar".into(),
-    };
+    let version = ytdlp::version()
+        .await
+        .unwrap_or_else(|| "nicht verfügbar".into());
     if let Ok(mut cache) = YTDLP_VERSION.lock() {
         *cache = Some((Instant::now(), version.clone()));
     }
@@ -149,6 +139,8 @@ pub(crate) async fn overview(State(state): State<WebState>, _admin: Admin) -> Ap
         "uptime_secs": state.started.elapsed().as_secs(),
         "guild": state.directory.guild_info(state.guild_id),
         "ytdlp_version": ytdlp_version(false).await,
+        "ytdlp_last_update": ytdlp::last_status(&state.db).await,
+        "time_zone": ytdlp::time_zone_name(),
         "cookies": cookies_path().is_file(),
     })))
 }
@@ -861,35 +853,14 @@ pub(crate) async fn logs(
     Ok(Json(json!(state.logs.since(q.after, 500))))
 }
 
-pub(crate) async fn ytdlp_update(_admin: Admin) -> ApiResult {
+pub(crate) async fn ytdlp_update(State(state): State<WebState>, _admin: Admin) -> ApiResult {
     info!("yt-dlp-Update über die Weboberfläche angestoßen");
-    let output = tokio::time::timeout(
-        Duration::from_secs(180),
-        Command::new("pip")
-            .args([
-                "install",
-                "--no-cache-dir",
-                "--quiet",
-                "--upgrade",
-                "yt-dlp[default,deno]",
-            ])
-            .kill_on_drop(true)
-            .output(),
-    )
-    .await
-    .map_err(|_| ApiError::bad_request("Update dauerte zu lange"))?
-    .map_err(|e| ApiError::bad_request(format!("pip nicht ausführbar: {e}")))?;
-    if !output.status.success() {
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        warn!(%stderr, "yt-dlp-Update fehlgeschlagen");
-        return Err(ApiError::bad_request(format!(
-            "Update fehlgeschlagen: {}",
-            stderr.lines().last().unwrap_or("unbekannter Fehler")
-        )));
-    }
+    let status = ytdlp::update(&state.db, "manuell").await;
     let version = ytdlp_version(true).await;
-    info!(%version, "yt-dlp aktualisiert");
-    Ok(Json(json!({ "version": version })))
+    if !status.ok {
+        return Err(ApiError::bad_request(status.message));
+    }
+    Ok(Json(json!({ "version": version, "status": status })))
 }
 
 #[derive(Deserialize)]

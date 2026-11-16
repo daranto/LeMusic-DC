@@ -13,6 +13,7 @@ anyhow.workspace = true
 async-trait.workspace = true
 fastrand.workspace = true
 flume.workspace = true
+jiff.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 songbird.workspace = true

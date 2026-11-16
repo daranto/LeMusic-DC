@@ -7,6 +7,7 @@ pub mod model;
 pub mod resolve;
 pub mod selftest;
 pub mod source;
+pub mod ytdlp;
 
 use std::{sync::Arc, time::Duration};
 

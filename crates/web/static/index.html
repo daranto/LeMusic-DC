@@ -129,6 +129,10 @@
             <label>PIN (optional, 4 Ziffern)<input name="public_pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="leer = ohne PIN" autocomplete="off"></label>
             <label>Öffentliche Adresse (für Links in Discord)<input name="public_url" placeholder="http://192.168.1.10:8080" autocomplete="off"></label>
             <p class="drop-note" id="public-link-note"></p>
+            <h3 class="subhead">yt-dlp aktuell halten</h3>
+            <label class="check"><input type="checkbox" name="ytdlp_auto_update"> Täglich nach Updates suchen und installieren</label>
+            <label>Uhrzeit<input name="ytdlp_update_time" type="time" required></label>
+            <p class="drop-note" id="ytdlp-schedule-note"></p>
             <button class="btn primary" type="submit">Speichern</button>
           </form>
 
@@ -161,7 +165,8 @@
           <div class="card">
             <h2>yt-dlp</h2>
             <p>Version: <strong id="ytdlp-version">…</strong></p>
-            <p class="muted">Wird bei jedem Containerstart automatisch aktualisiert. Bei YouTube-Problemen hier sofort aktualisieren.</p>
+            <p class="muted">Wird bei jedem Containerstart und täglich zur eingestellten Uhrzeit aktualisiert (Einstellungen → Bot). Bei YouTube-Problemen hier sofort aktualisieren.</p>
+            <p class="drop-note" id="ytdlp-last"></p>
             <button class="btn primary" id="btn-ytdlp-update">Jetzt aktualisieren</button>
           </div>
 

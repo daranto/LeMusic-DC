@@ -8,7 +8,7 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
 - **Selbstheilend:** Fehlgeschlagene oder vorzeitig abgebrochene Tracks werden ab der letzten Position bis zu 2× neu versucht, hängende Streams erkannt, dann übersprungen. Abgestürzte Player werden automatisch neu gestartet.
 - **Neustart-fest:** Warteschlange, Position, Lautstärke und Wiederholen liegen in SQLite. Nach einem Neustart oder Update läuft die Musik an derselben Stelle weiter.
 - **Reconnect:** Bricht die Voice-Verbindung ab, verbindet sich der Bot mit Backoff neu und setzt fort.
-- **Immer aktuelles yt-dlp:** Wird bei jedem Containerstart (und per Klick in der Weboberfläche) aktualisiert.
+- **Immer aktuelles yt-dlp:** Wird bei jedem Containerstart, täglich zur eingestellten Uhrzeit und per Klick in der Weboberfläche aktualisiert.
 - **DAVE (Ende-zu-Ende-Verschlüsselung von Discord)** wird nativ unterstützt (songbird 0.6).
 - Healthcheck, sauberes Herunterfahren, Log-Rotation, keine `unwrap()`s im Code.
 
@@ -75,13 +75,15 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 - Nach einem Neustart/Update ohne laufende Wiedergabe tritt er dem erlaubten Kanal bei, in dem die meisten Leute sitzen.
 - Ohne Autoplaylist verlässt er den Kanal wieder nach dem Inaktivitäts-Timeout.
 
+**yt-dlp aktuell halten:** YouTube ändert ständig etwas, und eine veraltete yt-dlp-Version ist die häufigste Ursache für „lädt nicht mehr“. Deshalb prüft der Bot einmal täglich zur eingestellten Uhrzeit (Einstellungen → Bot, Standard 04:00) auf eine neue Version und installiert sie. Das dauert wenige Sekunden, ein Neustart ist nicht nötig. Zusätzlich wird bei jedem Containerstart aktualisiert, und unter System → „Jetzt aktualisieren“ geht es sofort. Das Ergebnis der letzten Prüfung steht unter System und im Log. Die Uhrzeit gilt in der Zeitzone aus der Umgebungsvariable `TZ` (Standard Europe/Berlin). Startet der Container erst nach der Uhrzeit, zählt das Update beim Start für diesen Tag.
+
 **DJ** = Admins, Server-Manager und Mitglieder mit der DJ-Rolle. Ist keine DJ-Rolle eingestellt, sind alle DJ.
 
 ## Weboberfläche
 
 - **Wiedergabe:** Live-Status, Cover, Fortschritt, Steuerung, Lautstärke, Spulen, Warteschlange bearbeiten, direkt in einen Sprachkanal abspielen
 - **Playlists:** anlegen, importieren, bearbeiten, prüfen und abspielen (bis 1000 Titel pro Playlist)
-- **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein; DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, automatisch beitreten, Ansagen
+- **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein, tägliches yt-dlp-Update (Uhrzeit); DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, automatisch beitreten, Ansagen
 - **System:** yt-dlp aktualisieren, Selbsttest, YouTube-Cookies
 - **Logs** live, **Konto** (Passwort ändern)
 
@@ -171,6 +173,7 @@ Erscheint diese Meldung, liegt die Ursache beim Host, nicht bei YouTube/SoundClo
 | `GUILD_ID` | ✅ | ID deines Servers (Befehle werden dort sofort registriert) |
 | `ADMIN_USER` / `ADMIN_PASSWORD` | empfohlen | Login der Weboberfläche (nur beim ersten Start übernommen) |
 | `YTDLP_AUTO_UPDATE` | | yt-dlp beim Start aktualisieren (Standard `true`) |
+| `TZ` | | Zeitzone für das tägliche yt-dlp-Update (Standard `Europe/Berlin`) |
 | `LOG_FORMAT` | | `text` (Standard) oder `json` |
 | `RUST_LOG` | | Log-Level, z. B. `info,serenity=warn,songbird=warn` |
 | `WEB_BIND` / `DATA_DIR` | | Standard `0.0.0.0:8080` / `/data` |
