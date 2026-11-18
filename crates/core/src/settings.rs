@@ -36,6 +36,10 @@ pub struct BotSettings {
     pub ytdlp_auto_update: bool,
     /// Uhrzeit dafür („HH:MM“, Zeitzone aus `TZ`, sonst Europe/Berlin).
     pub ytdlp_update_time: String,
+    /// Geladene Titel auf der Platte zwischenspeichern.
+    pub cache_enabled: bool,
+    /// Höchstgröße des Caches in MB.
+    pub cache_max_mb: u64,
 }
 
 impl Default for BotSettings {
@@ -50,6 +54,8 @@ impl Default for BotSettings {
             public_url: String::new(),
             ytdlp_auto_update: true,
             ytdlp_update_time: "04:00".into(),
+            cache_enabled: false,
+            cache_max_mb: 2048,
         }
     }
 }
@@ -68,6 +74,8 @@ fn valid_time(s: &str) -> bool {
 impl BotSettings {
     pub const MAX_VOLUME: u16 = 200;
     pub const MAX_STATUS_LEN: usize = 128;
+    pub const MIN_CACHE_MB: u64 = 100;
+    pub const MAX_CACHE_MB: u64 = 1024 * 1024;
 
     pub fn validate(&self) -> Result<()> {
         if self.default_volume > Self::MAX_VOLUME {
@@ -81,6 +89,13 @@ impl BotSettings {
         let url = self.public_url.trim();
         if !url.is_empty() && !(url.starts_with("http://") || url.starts_with("https://")) {
             bail!("Die öffentliche Adresse muss mit http:// oder https:// beginnen");
+        }
+        if !(Self::MIN_CACHE_MB..=Self::MAX_CACHE_MB).contains(&self.cache_max_mb) {
+            bail!(
+                "Cache-Größe muss zwischen {} MB und {} GB liegen",
+                Self::MIN_CACHE_MB,
+                Self::MAX_CACHE_MB / 1024
+            );
         }
         if !valid_time(&self.ytdlp_update_time) {
             bail!("Uhrzeit für das yt-dlp-Update bitte als HH:MM angeben (z. B. 04:00)");

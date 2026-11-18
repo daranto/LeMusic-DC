@@ -13,6 +13,7 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
 - Selbstheilend: Retry ab letzter Position, Reconnect, abgestürzte Player starten neu; tote Videos werden erkannt und übersprungen
 - Neustart-fest: Warteschlange und Position überleben Neustarts und Updates
 - Discords Ende-zu-Ende-Verschlüsselung (DAVE) wird unterstützt
+- Optionaler **Audio-Cache** mit einstellbarer Größe: oft gespielte Titel starten sofort und werden nicht erneut von YouTube/SoundCloud geladen
 
 **Funktionen**
 
@@ -70,6 +71,7 @@ A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust
 - Self-healing: retries from the last position, voice reconnect, crashed players restart; dead videos are detected and skipped
 - Restart-proof: queue and position survive restarts and updates
 - Supports Discord's end-to-end voice encryption (DAVE)
+- Optional **audio cache** with a configurable size: frequently played tracks start instantly and aren't fetched from YouTube/SoundCloud again
 
 **Features**
 

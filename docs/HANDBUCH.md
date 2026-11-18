@@ -77,14 +77,20 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 
 **yt-dlp aktuell halten:** YouTube ändert ständig etwas, und eine veraltete yt-dlp-Version ist die häufigste Ursache für „lädt nicht mehr“. Deshalb prüft der Bot einmal täglich zur eingestellten Uhrzeit (Einstellungen → Bot, Standard 04:00) auf eine neue Version und installiert sie. Das dauert wenige Sekunden, ein Neustart ist nicht nötig. Zusätzlich wird bei jedem Containerstart aktualisiert, und unter System → „Jetzt aktualisieren“ geht es sofort. Das Ergebnis der letzten Prüfung steht unter System und im Log. Die Uhrzeit gilt in der Zeitzone aus der Umgebungsvariable `TZ` (Standard Europe/Berlin). Startet der Container erst nach der Uhrzeit, zählt das Update beim Start für diesen Tag.
 
+**Audio-Cache** (optional, Einstellungen → Bot): Vollständig geladene Titel werden unter `/data/cache` gespeichert und beim nächsten Mal direkt von dort gespielt. Sie starten dann sofort (gemessen: 10 ms statt 3–5 s), auch Spulen geht sofort, und YouTube/SoundCloud werden nicht erneut gefragt. Das hilft vor allem bei der Autoplaylist und bei Lieblingssongs.
+- **Größe:** frei einstellbar (Standard 2 GB ≈ 500 Songs, ca. 1 MB pro Minute). Ist der Cache voll, werden die am längsten nicht gespielten Titel gelöscht. Einzelne Titel über ¼ der Cache-Größe (z. B. stundenlange Mixes) werden nicht gespeichert, Livestreams nie.
+- **Sicher:** Gespeichert wird nur, was yt-dlp fehlerfrei komplett geladen hat. Bricht ein Titel aus dem Cache trotzdem ab, wird die Datei gelöscht und der Titel neu geladen.
+- Dasselbe Video unter verschiedenen Links (`youtu.be/…`, `music.youtube.com`, `&list=…`) teilt sich einen Eintrag.
+- Unter **System** siehst du Belegung, Anzahl der Titel und die Trefferquote seit dem Start. Dort kannst du den Cache auch leeren. Ausschalten behält die Dateien, nutzt sie aber nicht.
+
 **DJ** = Admins, Server-Manager und Mitglieder mit der DJ-Rolle. Ist keine DJ-Rolle eingestellt, sind alle DJ.
 
 ## Weboberfläche
 
 - **Wiedergabe:** Live-Status, Cover, Fortschritt, Steuerung, Lautstärke, Spulen, Warteschlange bearbeiten, direkt in einen Sprachkanal abspielen
 - **Playlists:** anlegen, importieren, bearbeiten, prüfen und abspielen (bis 1000 Titel pro Playlist)
-- **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein, tägliches yt-dlp-Update (Uhrzeit); DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, automatisch beitreten, Ansagen
-- **System:** yt-dlp aktualisieren, Selbsttest, YouTube-Cookies
+- **Einstellungen:** Status-Text, Standard-Lautstärke, Inaktivitäts-Timeout, Pausieren-wenn-allein, tägliches yt-dlp-Update (Uhrzeit), Audio-Cache (Größe); DJ-Rolle, erlaubter Text-/Sprachkanal, Vote-Skip-Quote, maximale Track-Länge, Autoplaylist, automatisch beitreten, Ansagen
+- **System:** yt-dlp aktualisieren, Audio-Cache (Belegung, Trefferquote, leeren), Selbsttest, YouTube-Cookies
 - **Logs** live, **Konto** (Passwort ändern)
 
 Änderungen wirken sofort, ohne Neustart.
@@ -210,6 +216,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build
 # Nur die Weboberfläche ausprobieren – ohne Discord, Wiedergabe simuliert
 # (http://127.0.0.1:8099, admin / demo-passwort):
 cargo run -p lemusic-web --example ui_demo
+# Audio-Kette ohne Discord testen (im Container), optional mit Cache:
+docker run --rm -v ./data:/data --entrypoint lemusic ghcr.io/daranto/lemusic-dc selftest --cache <Link>
 ```
 
 Jeder Push auf `main` baut über GitHub Actions ein neues Image (`:latest`, `:main`, `:sha-…`), Tags `v1.2.3` zusätzlich `:1.2.3`.

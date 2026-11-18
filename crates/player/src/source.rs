@@ -21,7 +21,7 @@ use std::{
     io::{self, BufRead, BufReader, Read, Write},
     process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio},
     sync::{
-        Arc,
+        Arc, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
     thread,
@@ -35,6 +35,8 @@ use songbird::input::{
     core::io::{MediaSource, ReadOnlySource},
 };
 use tracing::{debug, warn};
+
+use crate::cache;
 
 const SAMPLE_RATE: u32 = 48_000;
 const CHANNELS: u32 = 2;
@@ -97,7 +99,40 @@ impl YtDlpSource {
         }))
     }
 
+    /// ffmpeg liest direkt aus dem Cache – ohne yt-dlp. `-ss` vor `-i`
+    /// springt bei einer Datei ohne Dekodieren an die Position.
+    fn spawn_cached(
+        &self,
+        path: &std::path::Path,
+    ) -> io::Result<(ChildStdout, ChildGuard, LastError)> {
+        let start = format!("{:.3}", self.start_at.as_secs_f64());
+        let mut ffmpeg = Command::new("nice")
+            .args(["-n", HELPER_NICENESS, "ffmpeg", "-threads", "1"])
+            .args(["-hide_banner", "-loglevel", "error", "-ss", &start, "-i"])
+            .arg(path)
+            .args(["-vn", "-f", "f32le", "-ar", &SAMPLE_RATE.to_string()])
+            .args(["-ac", &CHANNELS.to_string(), "pipe:1"])
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()?;
+        let (Some(stdout), Some(stderr)) = (ffmpeg.stdout.take(), ffmpeg.stderr.take()) else {
+            drop(ChildGuard::new(vec![ffmpeg]));
+            return Err(io::Error::other("ffmpeg-Pipes fehlen"));
+        };
+        let last_error = LastError::default();
+        forward_stderr("ffmpeg", stderr, None);
+        debug!(url = %self.url, "Spiele aus dem Cache");
+        Ok((stdout, ChildGuard::new(vec![ffmpeg]), last_error))
+    }
+
     fn spawn(&self) -> io::Result<(ChildStdout, ChildGuard, LastError)> {
+        if self.attempt > 0 {
+            // Wiederholung: Eine evtl. kaputte Cache-Datei nicht erneut nutzen.
+            cache::remove(&self.url);
+        } else if let Some(path) = cache::lookup(&self.url) {
+            return self.spawn_cached(&path);
+        }
         // Abgebrochene HLS-Downloads hinterlassen Fragmente im
         // Arbeitsverzeichnis – daher ein eigenes Temp-Verzeichnis.
         let workdir = fragment_dir();
@@ -140,7 +175,7 @@ impl YtDlpSource {
             .spawn()?;
 
         let (Some(ytdlp_out), Some(ytdlp_err)) = (ytdlp.stdout.take(), ytdlp.stderr.take()) else {
-            drop(ChildGuard(vec![ytdlp]));
+            drop(ChildGuard::new(vec![ytdlp]));
             return Err(io::Error::other("yt-dlp-Pipes fehlen"));
         };
         let last_error = LastError::default();
@@ -164,7 +199,7 @@ impl YtDlpSource {
         let mut ffmpeg = match ffmpeg {
             Ok(child) => child,
             Err(e) => {
-                drop(ChildGuard(vec![ytdlp]));
+                drop(ChildGuard::new(vec![ytdlp]));
                 return Err(e);
             }
         };
@@ -174,13 +209,18 @@ impl YtDlpSource {
             ffmpeg.stdin.take(),
             ffmpeg.stderr.take(),
         ) else {
-            drop(ChildGuard(vec![ytdlp, ffmpeg]));
+            drop(ChildGuard::new(vec![ytdlp, ffmpeg]));
             return Err(io::Error::other("ffmpeg-Pipes fehlen"));
         };
         forward_stderr("ffmpeg", stderr, None);
 
-        let guard = ChildGuard(vec![ytdlp, ffmpeg]);
-        spool(ytdlp_out, stdin)?;
+        let guard = ChildGuard::new(vec![ytdlp, ffmpeg]);
+        // Für den Cache: Nur speichern, wenn yt-dlp erfolgreich endet.
+        let cache_to = (cache::max_entry_bytes() > 0)
+            .then(|| guard.0.first().cloned())
+            .flatten()
+            .map(|ytdlp| (self.url.clone(), ytdlp));
+        spool(ytdlp_out, stdin, cache_to)?;
         Ok((stdout, guard, last_error))
     }
 }
@@ -362,7 +402,13 @@ fn forward_stderr(program: &'static str, stderr: ChildStderr, last_error: Option
 
 /// yt-dlp → Speicher → ffmpeg: Ein Thread lädt so schnell wie möglich in
 /// den Speicher, ein zweiter füttert ffmpeg im Tempo der Wiedergabe.
-fn spool(mut download: ChildStdout, mut ffmpeg_in: ChildStdin) -> io::Result<()> {
+/// Mit `cache_to` wird eine Kopie gesammelt und nach erfolgreichem
+/// Download im Cache abgelegt.
+fn spool(
+    mut download: ChildStdout,
+    mut ffmpeg_in: ChildStdin,
+    cache_to: Option<(String, SharedChild)>,
+) -> io::Result<()> {
     let (tx, rx) = flume::unbounded::<Vec<u8>>();
     // Begrenzt wird nach Bytes, nicht nach Blöcken – Pipes liefern
     // unterschiedlich große Stücke.
@@ -372,6 +418,8 @@ fn spool(mut download: ChildStdout, mut ffmpeg_in: ChildStdin) -> io::Result<()>
         .name("audio-download".into())
         .spawn(move || {
             let mut buf = vec![0u8; CHUNK_SIZE];
+            let limit = usize::try_from(cache::max_entry_bytes()).unwrap_or(usize::MAX);
+            let mut copy: Option<Vec<u8>> = cache_to.as_ref().map(|_| Vec::new());
             loop {
                 while queued.load(Ordering::Relaxed) > SPOOL_LIMIT_BYTES {
                     thread::sleep(Duration::from_millis(50));
@@ -380,8 +428,20 @@ fn spool(mut download: ChildStdout, mut ffmpeg_in: ChildStdin) -> io::Result<()>
                     }
                 }
                 match download.read(&mut buf) {
-                    Ok(0) => return,
+                    Ok(0) => {
+                        if let (Some(data), Some((url, ytdlp))) = (copy, cache_to) {
+                            finish_cache(&url, &data, &ytdlp);
+                        }
+                        return;
+                    }
                     Ok(n) => {
+                        if let Some(data) = copy.as_mut() {
+                            if data.len() + n > limit {
+                                copy = None; // zu groß für den Cache
+                            } else {
+                                data.extend_from_slice(&buf[..n]);
+                            }
+                        }
                         // Exakt so groß wie gelesen, sonst würde jeder
                         // kleine Lesevorgang einen ganzen Block belegen.
                         queued.fetch_add(n, Ordering::Relaxed);
@@ -409,6 +469,26 @@ fn spool(mut download: ChildStdout, mut ffmpeg_in: ChildStdin) -> io::Result<()>
             // Drop von `ffmpeg_in` schließt stdin → ffmpeg beendet sauber.
         })?;
     Ok(())
+}
+
+/// Wartet kurz auf das Ende von yt-dlp und speichert nur bei Erfolg.
+fn finish_cache(url: &str, data: &[u8], ytdlp: &SharedChild) {
+    let deadline = Instant::now() + Duration::from_secs(15);
+    loop {
+        let status = ytdlp
+            .lock()
+            .ok()
+            .and_then(|mut c| c.try_wait().ok().flatten());
+        match status {
+            Some(s) if s.success() => {
+                cache::store(url, data);
+                return;
+            }
+            Some(_) => return, // abgebrochen (Skip) oder fehlgeschlagen
+            None if Instant::now() >= deadline => return,
+            None => thread::sleep(Duration::from_millis(100)),
+        }
+    }
 }
 
 /// Liest ffmpeg-Ausgabe in den Puffer, bis der Strom endet oder der Leser
@@ -441,16 +521,31 @@ fn pump(mut stdout: ChildStdout, tx: Sender<Vec<u8>>) {
     }
 }
 
+type SharedChild = Arc<Mutex<Child>>;
+
 /// Beendet yt-dlp und ffmpeg, sobald der Strom nicht mehr gebraucht wird.
-struct ChildGuard(Vec<Child>);
+struct ChildGuard(Vec<SharedChild>);
 
 impl ChildGuard {
-    fn terminate(mut children: Vec<Child>) {
-        for child in &mut children {
-            let _ = child.kill();
+    fn new(children: Vec<Child>) -> Self {
+        Self(
+            children
+                .into_iter()
+                .map(|c| Arc::new(Mutex::new(c)))
+                .collect(),
+        )
+    }
+
+    fn terminate(children: Vec<SharedChild>) {
+        for child in &children {
+            if let Ok(mut c) = child.lock() {
+                let _ = c.kill();
+            }
         }
-        for child in &mut children {
-            if let Err(e) = child.wait() {
+        for child in &children {
+            if let Ok(mut c) = child.lock()
+                && let Err(e) = c.wait()
+            {
                 debug!(error = %e, "Kindprozess konnte nicht eingesammelt werden");
             }
         }

@@ -206,6 +206,7 @@ async function refreshOverview() {
     $("#ytdlp-version").textContent = o.ytdlp_version;
     state.timeZone = o.time_zone;
     renderYtdlpLast(o.ytdlp_last_update);
+    renderCache(o.cache);
     const badge = $("#cookies-badge");
     badge.textContent = o.cookies ? "aktiv" : "keine";
     badge.classList.toggle("on", o.cookies);
@@ -1101,6 +1102,9 @@ async function loadSettings() {
     f.public_url.value = bot.public_url;
     f.ytdlp_auto_update.checked = bot.ytdlp_auto_update;
     f.ytdlp_update_time.value = bot.ytdlp_update_time;
+    f.cache_enabled.checked = bot.cache_enabled;
+    f.cache_max_gb.value = Math.round((bot.cache_max_mb / 1024) * 10) / 10;
+    updateCacheField();
     updatePublicNote();
     updateYtdlpNote();
   }
@@ -1130,6 +1134,37 @@ async function loadSettings() {
     updateAutoJoin();
   }
 }
+
+function fmtBytes(b) {
+  if (b >= 1024 ** 3) return `${(b / 1024 ** 3).toFixed(1).replace(".", ",")} GB`;
+  return `${Math.round(b / 1024 ** 2)} MB`;
+}
+
+function renderCache(c) {
+  if (!c) return;
+  const badge = $("#cache-badge");
+  badge.textContent = c.enabled ? "aktiv" : "aus";
+  badge.classList.toggle("on", c.enabled);
+  $("#cache-usage").textContent = c.entries
+    ? `${fmtBytes(c.bytes)} von ${fmtBytes(c.max_bytes)} belegt · ${c.entries} Titel`
+    : c.enabled ? `Noch leer · Platz für ${fmtBytes(c.max_bytes)}` : "Leer";
+  $("#cache-bar").style.width = c.max_bytes ? `${Math.min(100, (c.bytes / c.max_bytes) * 100)}%` : "0%";
+  const total = c.hits + c.misses;
+  $("#cache-hits").textContent = total
+    ? `Seit dem Start: ${c.hits} aus dem Cache, ${c.misses} neu geladen (${Math.round((c.hits / total) * 100)} % Treffer)`
+    : "";
+}
+
+function updateCacheField() {
+  const f = $("#bot-settings");
+  f.cache_max_gb.disabled = !f.cache_enabled.checked;
+}
+$("#bot-settings [name=cache_enabled]").addEventListener("change", updateCacheField);
+
+$("#btn-cache-clear").addEventListener("click", (ev) => {
+  if (!confirm("Alle zwischengespeicherten Titel löschen? Sie werden beim nächsten Abspielen neu geladen.")) return;
+  run(ev.currentTarget, () => api("DELETE", "/system/cache"), (r) => `${r.removed} Titel gelöscht`).then(refreshOverview);
+});
 
 function renderYtdlpLast(s) {
   const el = $("#ytdlp-last");
@@ -1174,7 +1209,10 @@ function updatePublicNote() {
 
 $("#bot-settings").addEventListener("submit", (ev) => {
   ev.preventDefault();
-  run($("button", ev.target), () => api("PUT", "/settings/bot", formData(ev.target)), "Gespeichert");
+  const body = formData(ev.target);
+  body.cache_max_mb = Math.round((body.cache_max_gb ?? 2) * 1024);
+  delete body.cache_max_gb;
+  run($("button", ev.target), () => api("PUT", "/settings/bot", body), "Gespeichert").then(refreshOverview);
 });
 
 $("#guild-settings").addEventListener("submit", (ev) => {

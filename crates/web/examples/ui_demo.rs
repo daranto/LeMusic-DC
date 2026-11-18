@@ -266,6 +266,7 @@ async fn main() -> anyhow::Result<()> {
     db.playlist_save("Party", &big[..12]).await?;
 
     let settings = SettingsStore::load(db.clone()).await?;
+    lemusic_player::cache::watch_settings(settings.clone());
     let fake = Arc::new(Fake);
     let players = PlayerManager::new(
         songbird::Songbird::serenity(),

@@ -1,4 +1,4 @@
-//! `lemusic selftest [--soundcloud] <Link oder Suche>` für die Kommandozeile.
+//! `lemusic selftest [--soundcloud] [--cache] <Link oder Suche>` für die Kommandozeile.
 
 use std::time::{Duration, Instant};
 
@@ -10,7 +10,8 @@ use lemusic_player::{SearchSource, selftest};
 const DECODE_SECONDS: f64 = 30.0;
 
 pub async fn run(args: &[String]) -> Result<()> {
-    let usage = "Aufruf: lemusic selftest [--soundcloud] [--start 1:30] <Link oder Suche>";
+    let usage =
+        "Aufruf: lemusic selftest [--soundcloud] [--cache] [--start 1:30] <Link oder Suche>";
     let mut source = SearchSource::YouTube;
     let mut start_at = Duration::ZERO;
     let mut rest = args.iter();
@@ -18,6 +19,8 @@ pub async fn run(args: &[String]) -> Result<()> {
     while let Some(arg) = rest.next() {
         match arg.as_str() {
             "--soundcloud" => source = SearchSource::SoundCloud,
+            // Audio-Cache unter $DATA_DIR/cache nutzen (2 GB).
+            "--cache" => lemusic_player::cache::configure(true, 2048),
             "--start" => {
                 start_at = rest
                     .next()

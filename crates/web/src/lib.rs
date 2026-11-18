@@ -108,6 +108,7 @@ pub fn router(state: WebState) -> Router {
         )
         .route("/logs", get(api::logs))
         .route("/system/ytdlp-update", post(api::ytdlp_update))
+        .route("/system/cache", axum::routing::delete(api::clear_cache))
         .route("/system/selftest", post(api::selftest))
         .route(
             "/system/cookies",

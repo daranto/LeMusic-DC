@@ -141,6 +141,7 @@ pub(crate) async fn overview(State(state): State<WebState>, _admin: Admin) -> Ap
         "ytdlp_version": ytdlp_version(false).await,
         "ytdlp_last_update": ytdlp::last_status(&state.db).await,
         "time_zone": ytdlp::time_zone_name(),
+        "cache": tokio::task::spawn_blocking(lemusic_player::cache::stats).await.ok(),
         "cookies": cookies_path().is_file(),
     })))
 }
@@ -851,6 +852,13 @@ pub(crate) async fn logs(
     Query(q): Query<LogsQuery>,
 ) -> ApiResult {
     Ok(Json(json!(state.logs.since(q.after, 500))))
+}
+
+pub(crate) async fn clear_cache(_admin: Admin) -> ApiResult {
+    let removed = tokio::task::spawn_blocking(lemusic_player::cache::clear)
+        .await
+        .map_err(|e| ApiError::bad_request(format!("Leeren fehlgeschlagen: {e}")))?;
+    Ok(Json(json!({ "removed": removed })))
 }
 
 pub(crate) async fn ytdlp_update(State(state): State<WebState>, _admin: Admin) -> ApiResult {

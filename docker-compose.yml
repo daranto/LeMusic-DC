@@ -13,7 +13,7 @@ services:
       # „127.0.0.1:“ entfernen (dann am besten hinter einen HTTPS-Proxy).
       - "127.0.0.1:8080:8080"
     volumes:
-      # Datenbank, yt-dlp-Cache, optionale cookies.txt
+      # Datenbank, optionaler Audio-Cache (/data/cache), optionale cookies.txt
       - ./data:/data
     # Zeit für sauberes Herunterfahren (Zustand sichern, Kanal verlassen).
     stop_grace_period: 15s
