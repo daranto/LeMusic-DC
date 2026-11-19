@@ -36,6 +36,9 @@ pub struct QueueEntry {
     /// Stammt aus der Autoplaylist. Wünsche werden immer davor eingereiht.
     #[serde(default)]
     pub autoplay: bool,
+    /// Über das öffentliche Dashboard gewünscht (zählt gegen das Gäste-Limit).
+    #[serde(default)]
+    pub guest: bool,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -100,6 +103,8 @@ pub struct EnqueueOutcome {
     /// Position des ersten neuen Tracks in der Warteschlange (1 = als Nächstes),
     /// 0 = spielt sofort.
     pub position: usize,
+    /// So viele Tracks passten nicht mehr in die Warteschlange.
+    pub dropped: usize,
 }
 
 /// Anfrage zum Einreihen.
@@ -114,7 +119,14 @@ pub struct EnqueueRequest {
     /// Vor diesem Eintrag einreihen (Drag & Drop in der Weboberfläche).
     /// Hat Vorrang vor `play_next`; fehlt der Eintrag, gilt die normale Regel.
     pub before: Option<u64>,
+    /// Wunsch eines Gasts über das öffentliche Dashboard.
+    pub guest: bool,
 }
+
+/// Höchstens so viele Wünsche (ohne Autoplaylist) in der Warteschlange.
+pub const MAX_QUEUED_REQUESTS: usize = 2000;
+/// Höchstens so viele noch nicht gespielte Gast-Wünsche in der Warteschlange.
+pub const MAX_GUEST_QUEUED: usize = 100;
 
 /// Ergebnis eines automatischen Beitritts.
 #[derive(Debug, Clone, PartialEq, Eq)]

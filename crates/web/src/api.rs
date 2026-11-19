@@ -191,6 +191,7 @@ pub(crate) async fn enqueue(
     voice_channel: u64,
     next: bool,
     before: Option<u64>,
+    guest: bool,
 ) -> ApiResult {
     let settings = GuildSettings::load(&state.db, state.guild_id).await?;
     let (tracks, too_long): (Vec<_>, Vec<_>) = tracks.into_iter().partition(|t| {
@@ -211,12 +212,14 @@ pub(crate) async fn enqueue(
             text_channel: None,
             play_next: next,
             before,
+            guest,
         })
         .await?;
     Ok(Json(json!({
         "added": outcome.added,
         "position": outcome.position,
         "skipped_too_long": too_long.len(),
+        "queue_full": outcome.dropped,
     })))
 }
 
@@ -232,7 +235,7 @@ pub(crate) async fn play(
         SearchSource::YouTube
     };
     let tracks = resolve(&form.query, source).await?;
-    enqueue(&state, tracks, channel, form.next, None).await
+    enqueue(&state, tracks, channel, form.next, None, false).await
 }
 
 #[derive(Deserialize)]
@@ -296,7 +299,15 @@ pub(crate) async fn enqueue_tracks(
         return Err(ApiError::bad_request("Ungültige Anzahl Titel"));
     }
     let channel = voice_channel_for(&state, form.voice_channel.as_deref()).await?;
-    let result = enqueue(&state, tracks, channel, form.next || form.now, form.before).await?;
+    let result = enqueue(
+        &state,
+        tracks,
+        channel,
+        form.next || form.now,
+        form.before,
+        false,
+    )
+    .await?;
     if form.now && result.0.get("position").and_then(Value::as_u64) == Some(1) {
         state.players.player(state.guild_id).skip().await?;
     }
@@ -512,7 +523,7 @@ pub(crate) async fn play_playlist(
         fastrand::shuffle(&mut tracks);
     }
     let channel = voice_channel_for(&state, form.voice_channel.as_deref()).await?;
-    enqueue(&state, tracks, channel, false, None).await
+    enqueue(&state, tracks, channel, false, None, false).await
 }
 
 #[derive(Deserialize)]

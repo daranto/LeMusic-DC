@@ -72,20 +72,51 @@ pub(crate) fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-fn cookie_header(token: &str, max_age: u64) -> HeaderValue {
-    named_cookie_header(COOKIE, token, max_age, "/")
+fn cookie_header(token: &str, max_age: u64, secure: bool) -> HeaderValue {
+    named_cookie_header(COOKIE, token, max_age, "/", secure)
 }
 
+/// `secure`: Cookie nur über HTTPS senden (siehe [`is_https`]).
 pub(crate) fn named_cookie_header(
     name: &str,
     token: &str,
     max_age: u64,
     path: &str,
+    secure: bool,
 ) -> HeaderValue {
+    let secure = if secure { "; Secure" } else { "" };
     HeaderValue::from_str(&format!(
-        "{name}={token}; HttpOnly; SameSite=Strict; Path={path}; Max-Age={max_age}"
+        "{name}={token}; HttpOnly; SameSite=Strict; Path={path}; Max-Age={max_age}{secure}"
     ))
     .unwrap_or_else(|_| HeaderValue::from_static(""))
+}
+
+/// Kam die Anfrage über HTTPS? Der Bot selbst spricht nur HTTP; HTTPS gibt es
+/// nur über einen Reverse Proxy bzw. Cloudflare Tunnel. Erkannt wird das an
+/// den üblichen Proxy-Headern oder daran, dass die Anfrage an die
+/// eingestellte öffentliche `https://`-Adresse ging.
+///
+/// Ein gefälschter Header schadet nur dem Fälscher: Über HTTP schickt der
+/// Browser ein `Secure`-Cookie nicht zurück.
+pub(crate) fn is_https(headers: &HeaderMap, public_url: &str) -> bool {
+    let value = |name: &str| {
+        headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_ascii_lowercase)
+    };
+    let forwarded_proto = value("x-forwarded-proto")
+        .is_some_and(|v| v.split(',').next().map(str::trim) == Some("https"));
+    let cf_visitor = value("cf-visitor").is_some_and(|v| v.contains("\"https\""));
+    let forwarded = value("forwarded").is_some_and(|v| v.contains("proto=https"));
+    let public_host = public_url
+        .trim()
+        .to_ascii_lowercase()
+        .strip_prefix("https://")
+        .map(crate::host_only)
+        .filter(|h| !h.is_empty());
+    let via_public_url = public_host.is_some() && crate::request_host(headers) == public_host;
+    forwarded_proto || cf_visitor || forwarded || via_public_url
 }
 
 pub(crate) fn has_csrf_header(parts: &Parts) -> bool {
@@ -158,10 +189,11 @@ pub(crate) async fn login(
         Some(token) => {
             state.limiter.reset();
             info!(user = %form.username.trim(), "Anmeldung an der Weboberfläche");
+            let secure = is_https(&headers, &state.settings.current().public_url);
             let mut response = Json(json!({ "username": form.username.trim() })).into_response();
             response.headers_mut().insert(
                 header::SET_COOKIE,
-                cookie_header(&token, SESSION_TTL.as_secs()),
+                cookie_header(&token, SESSION_TTL.as_secs(), secure),
             );
             Ok(response)
         }
@@ -177,13 +209,15 @@ pub(crate) async fn login(
 
 pub(crate) async fn logout(
     State(state): State<WebState>,
+    headers: HeaderMap,
     admin: Admin,
 ) -> Result<Response, ApiError> {
     state.db.logout(&admin.token).await?;
+    let secure = is_https(&headers, &state.settings.current().public_url);
     let mut response = Json(json!({ "ok": true })).into_response();
     response
         .headers_mut()
-        .insert(header::SET_COOKIE, cookie_header("", 0));
+        .insert(header::SET_COOKIE, cookie_header("", 0, secure));
     Ok(response)
 }
 
@@ -225,6 +259,52 @@ mod tests {
         assert_eq!(session_token(&headers).as_deref(), Some("abc123"));
         headers.insert(header::COOKIE, HeaderValue::from_static("lemusic_session="));
         assert_eq!(session_token(&headers), None);
+    }
+
+    #[test]
+    fn secure_flag_only_when_requested() -> Result<(), String> {
+        let plain = named_cookie_header("a", "b", 60, "/", false);
+        let secure = named_cookie_header("a", "b", 60, "/", true);
+        assert!(
+            !plain
+                .to_str()
+                .map_err(|e| e.to_string())?
+                .contains("Secure")
+        );
+        assert!(
+            secure
+                .to_str()
+                .map_err(|e| e.to_string())?
+                .ends_with("; Secure")
+        );
+        Ok(())
+    }
+
+    #[test]
+    fn detects_https_behind_proxy() {
+        let mut headers = HeaderMap::new();
+        assert!(!is_https(&headers, ""));
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("https"));
+        assert!(is_https(&headers, ""));
+
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "cf-visitor",
+            HeaderValue::from_static(r#"{"scheme":"https"}"#),
+        );
+        assert!(is_https(&headers, ""));
+
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-proto", HeaderValue::from_static("http"));
+        assert!(!is_https(&headers, ""));
+
+        // Anfrage an die öffentliche HTTPS-Adresse.
+        let mut headers = HeaderMap::new();
+        headers.insert(header::HOST, HeaderValue::from_static("music.example.org"));
+        assert!(is_https(&headers, "https://Music.example.org/"));
+        assert!(!is_https(&headers, "http://music.example.org"));
+        headers.insert(header::HOST, HeaderValue::from_static("192.168.1.5:8080"));
+        assert!(!is_https(&headers, "https://music.example.org"));
     }
 
     #[test]
