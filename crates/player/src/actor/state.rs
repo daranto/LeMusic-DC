@@ -19,6 +19,13 @@ impl Actor {
                 ready: c.ready,
             }),
             queue: self.queue.iter().cloned().collect(),
+            history: self
+                .history
+                .iter()
+                // Der laufende Titel steht oben bei „Spielt jetzt“.
+                .skip_while(|e| self.current.as_ref().is_some_and(|c| c.entry.id == e.id))
+                .cloned()
+                .collect(),
             repeat: self.repeat,
             volume: self.volume,
         }
@@ -40,6 +47,7 @@ impl Actor {
             repeat: self.repeat,
             volume: self.volume,
             paused: self.paused && !self.auto_paused,
+            history: self.history.iter().cloned().collect(),
         })
     }
 
@@ -104,12 +112,14 @@ impl Actor {
             .queue
             .iter()
             .chain(saved.current.as_ref().map(|c| &c.entry))
+            .chain(&saved.history)
             .map(|e| e.id)
             .max()
             .unwrap_or(0)
             + 1;
         self.text_channel = saved.text_channel;
         self.repeat = saved.repeat;
+        self.history = saved.history.into_iter().take(MAX_HISTORY).collect();
         self.volume = saved.volume;
         self.paused = saved.paused;
         self.queue = saved.queue.into();

@@ -504,3 +504,24 @@ async fn backup_only_for_admin_and_is_sqlite() -> TestResult {
     assert_eq!(leftovers, 0);
     Ok(())
 }
+
+// ---------------------------------------------------------------------------
+// Funktionen
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn new_settings_default_on_and_history_is_exposed() -> TestResult {
+    let (app, state) = app().await?;
+    let cookie = login(&app).await?;
+    let bot = get("/api/settings/bot").cookie(&cookie).send(&app).await?;
+    assert_eq!(bot.json()["fair_queue"], true);
+    assert_eq!(bot.json()["normalize_volume"], true);
+
+    let player = get("/api/player").cookie(&cookie).send(&app).await?;
+    assert!(player.json()["history"].is_array());
+
+    enable_public(&state, "").await?;
+    let public = get("/public/api/player").send(&app).await?;
+    assert!(public.json()["player"]["history"].is_array());
+    Ok(())
+}

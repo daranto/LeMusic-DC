@@ -50,6 +50,8 @@ pub fn duration_label(d: Option<Duration>) -> String {
 pub fn requester(entry: &QueueEntry) -> String {
     if entry.autoplay {
         "Autoplaylist".into()
+    } else if entry.guest {
+        "Gast (Dashboard)".into()
     } else if entry.requester == 0 {
         "Weboberfläche".into()
     } else {

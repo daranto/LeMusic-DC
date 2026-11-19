@@ -17,6 +17,8 @@ async function loadSettings() {
     f.default_volume.value = bot.default_volume;
     f.idle_timeout_secs.value = bot.idle_timeout_secs;
     f.pause_when_alone.checked = bot.pause_when_alone;
+    f.fair_queue.checked = bot.fair_queue;
+    f.normalize_volume.checked = bot.normalize_volume;
     f.public_enabled.checked = bot.public_enabled;
     f.public_pin.value = bot.public_pin;
     f.public_url.value = bot.public_url;

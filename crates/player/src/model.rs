@@ -39,6 +39,10 @@ pub struct QueueEntry {
     /// Über das öffentliche Dashboard gewünscht (zählt gegen das Gäste-Limit).
     #[serde(default)]
     pub guest: bool,
+    /// Anonyme Kennung des Gasts (aus seiner Adresse abgeleitet) – damit die
+    /// Wünsche verschiedener Gäste fair gemischt werden. 0 = kein Gast.
+    #[serde(default)]
+    pub guest_id: u64,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -58,6 +62,8 @@ pub struct Snapshot {
     pub text_channel: Option<u64>,
     pub now: Option<NowPlaying>,
     pub queue: Vec<QueueEntry>,
+    /// Zuletzt gespielte Titel, der jüngste zuerst (ohne den laufenden).
+    pub history: Vec<QueueEntry>,
     pub repeat: RepeatMode,
     pub volume: u16,
 }
@@ -119,8 +125,9 @@ pub struct EnqueueRequest {
     /// Vor diesem Eintrag einreihen (Drag & Drop in der Weboberfläche).
     /// Hat Vorrang vor `play_next`; fehlt der Eintrag, gilt die normale Regel.
     pub before: Option<u64>,
-    /// Wunsch eines Gasts über das öffentliche Dashboard.
-    pub guest: bool,
+    /// Wunsch eines Gasts über das öffentliche Dashboard: seine anonyme
+    /// Kennung (≠ 0).
+    pub guest: Option<u64>,
 }
 
 /// Höchstens so viele Wünsche (ohne Autoplaylist) in der Warteschlange.

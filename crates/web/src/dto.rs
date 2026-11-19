@@ -75,6 +75,8 @@ pub struct EntryDto {
     pub track: TrackDto,
     pub requester: Option<String>,
     pub autoplay: bool,
+    /// Über das öffentliche Dashboard gewünscht.
+    pub guest: bool,
 }
 
 impl From<&QueueEntry> for EntryDto {
@@ -84,6 +86,7 @@ impl From<&QueueEntry> for EntryDto {
             track: TrackDto::from(&*e.meta),
             requester: (e.requester != 0).then(|| e.requester.to_string()),
             autoplay: e.autoplay,
+            guest: e.guest,
         }
     }
 }
@@ -102,6 +105,8 @@ pub struct PlayerDto {
     pub listeners: Option<usize>,
     pub now: Option<NowDto>,
     pub queue: Vec<EntryDto>,
+    /// Zuletzt gespielt, der jüngste zuerst.
+    pub history: Vec<EntryDto>,
     pub queue_duration: u64,
     pub repeat: RepeatMode,
     pub volume: u16,
@@ -119,6 +124,7 @@ impl PlayerDto {
                 ready: n.ready,
             }),
             queue: s.queue.iter().map(EntryDto::from).collect(),
+            history: s.history.iter().map(EntryDto::from).collect(),
             queue_duration: s.queue_duration().as_secs(),
             repeat: s.repeat,
             volume: s.volume,

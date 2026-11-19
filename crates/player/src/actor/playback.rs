@@ -11,9 +11,10 @@ impl Actor {
         if req.tracks.is_empty() {
             bail!("Keine Tracks");
         }
-        let room = enqueue_room(&self.queue, req.guest);
+        let guest = req.guest.is_some();
+        let room = enqueue_room(&self.queue, guest);
         if room == 0 {
-            if req.guest {
+            if guest {
                 bail!(
                     "Es warten schon {MAX_GUEST_QUEUED} Gast-Wünsche – bitte warten, bis ein paar gespielt wurden"
                 );
@@ -26,9 +27,7 @@ impl Actor {
         if dropped > 0 {
             info!(
                 guild_id = self.guild_id,
-                dropped,
-                guest = req.guest,
-                "Warteschlange voll, Tracks ausgelassen"
+                dropped, guest, "Warteschlange voll, Tracks ausgelassen"
             );
         }
         self.ensure_joined(req.voice_channel).await?;
@@ -40,26 +39,47 @@ impl Actor {
             .into_iter()
             .map(|meta| {
                 let mut entry = self.new_entry(meta, req.requester);
-                entry.guest = req.guest;
+                entry.guest = guest;
+                entry.guest_id = req.guest.unwrap_or(0);
                 entry
             })
             .collect();
         let added = entries.len();
 
         // Vorne einreihen, sonst hinter die anderen Wünsche, aber vor die
-        // Autoplaylist – ein Wunsch soll nie hinter ihr warten.
-        let index = match req
+        // Autoplaylist – ein Wunsch soll nie hinter ihr warten. Mit „fair
+        // mischen“ reihum nach Wünschendem.
+        let before = req
             .before
-            .and_then(|b| self.queue.iter().position(|e| e.id == b))
-        {
-            Some(i) => i,
-            None if req.play_next => 0,
-            None => request_insert_index(&self.queue),
+            .and_then(|b| self.queue.iter().position(|e| e.id == b));
+        let index = match before {
+            Some(i) => Some(i),
+            None if req.play_next => Some(0),
+            None if self.shared.settings.current().fair_queue => None,
+            None => Some(request_insert_index(&self.queue)),
         };
-        for (offset, entry) in entries.into_iter().enumerate() {
-            self.queue.insert(index + offset, entry);
-        }
-        let position = index + 1;
+        let position = match index {
+            Some(index) => {
+                for (offset, entry) in entries.into_iter().enumerate() {
+                    self.queue.insert(index + offset, entry);
+                }
+                index + 1
+            }
+            None => {
+                let current = self
+                    .current
+                    .as_ref()
+                    .filter(|c| !c.entry.autoplay)
+                    .map(|c| Wisher::of(&c.entry));
+                let mut first = None;
+                for entry in entries {
+                    let i = fair_insert_index(&self.queue, Wisher::of(&entry), current);
+                    first = Some(first.map_or(i, |f: usize| f.min(i)));
+                    self.queue.insert(i, entry);
+                }
+                first.unwrap_or(0) + 1
+            }
+        };
         self.dirty = true;
         self.idle_since = None;
 
@@ -158,6 +178,7 @@ impl Actor {
             requester,
             autoplay: false,
             guest: false,
+            guest_id: 0,
         }
     }
 
@@ -302,7 +323,10 @@ impl Actor {
 
         while let Some(next) = self.queue.pop_front() {
             match self.start(next.clone(), Duration::ZERO, 0, true).await {
-                Ok(()) => return,
+                Ok(()) => {
+                    self.remember_played(&next);
+                    return;
+                }
                 Err(e) => {
                     warn!(error = %e, title = %next.meta.title, "Track konnte nicht gestartet werden");
                     metrics::TRACKS_FAILED.inc();

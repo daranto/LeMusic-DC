@@ -283,9 +283,33 @@ function renderQueue() {
     key: e.id,
     track: e.track,
     cls: e.autoplay ? "auto" : "",
-    sub: e.autoplay ? ` · <span class="tag">Autoplaylist</span>` : e.requester ? "" : " · Web",
+    sub: e.autoplay ? ` · <span class="tag">Autoplaylist</span>` : e.guest ? " · Gast" : e.requester ? "" : " · Web",
   })));
+  renderHistory();
 }
+
+/** „Zuletzt gespielt“ mit Knopf zum erneuten Einreihen. */
+function renderHistory() {
+  const h = state.player?.history ?? [];
+  $("#history").innerHTML = h.length
+    ? h.map((e, i) => `
+        <li>
+          ${e.track.thumbnail ? `<img loading="lazy" alt="" src="${esc(e.track.thumbnail)}">` : ""}
+          <div class="meta">
+            <a href="${esc(e.track.url)}" target="_blank" rel="noopener">${esc(e.track.title)}</a>
+            <small>${esc(e.track.author)}${e.autoplay ? " · Autoplaylist" : e.guest ? " · Gast" : ""}</small>
+          </div>
+          <span class="dur">${fmt(e.track.duration)}</span>
+          <div class="item-actions"><button class="btn small" data-again="${i}" title="Nochmal einreihen">↻ Nochmal</button></div>
+        </li>`).join("")
+    : `<li class="empty">Noch nichts gespielt.</li>`;
+}
+
+$("#history").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button[data-again]");
+  const entry = btn && state.player?.history?.[Number(btn.dataset.again)];
+  if (entry) enqueueTracks([entry.track]);
+});
 
 $("#btn-queue-more").addEventListener("click", (ev) => {
   const q = state.player?.queue ?? [];

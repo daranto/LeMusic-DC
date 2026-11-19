@@ -22,7 +22,7 @@ use std::{
     process::{Child, ChildStderr, ChildStdin, ChildStdout, Command, Stdio},
     sync::{
         Arc, Mutex,
-        atomic::{AtomicUsize, Ordering},
+        atomic::{AtomicBool, AtomicUsize, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -40,6 +40,28 @@ use crate::cache;
 
 const SAMPLE_RATE: u32 = 48_000;
 const CHANNELS: u32 = 2;
+
+/// Lautstärke angleichen (Einstellung „Lautstärke angleichen“). Standard wie
+/// in den Einstellungen: an.
+static NORMALIZE: AtomicBool = AtomicBool::new(true);
+/// EBU R128 in einem Durchgang: Zielwert -16 LUFS (üblich für Streaming),
+/// Spitzen höchstens -1,5 dBTP. Wirkt beim Dekodieren, das dem Abspielen weit
+/// vorauseilt – kostet also keine Echtzeit.
+const LOUDNORM: &str = "loudnorm=I=-16:LRA=11:TP=-1.5";
+
+/// Schaltet das Angleichen für alle ab jetzt gestarteten Titel.
+pub fn set_normalize(on: bool) {
+    NORMALIZE.store(on, Ordering::Relaxed);
+}
+
+/// ffmpeg-Filter für die aktuelle Einstellung.
+fn audio_filter() -> &'static [&'static str] {
+    if NORMALIZE.load(Ordering::Relaxed) {
+        &["-af", LOUDNORM]
+    } else {
+        &[]
+    }
+}
 /// Bytes pro Sekunde PCM (f32 = 4 Bytes pro Sample).
 const BYTES_PER_SECOND: usize = SAMPLE_RATE as usize * CHANNELS as usize * 4;
 /// Größe eines Blocks, den der Pump-Thread liest.
@@ -110,7 +132,9 @@ impl YtDlpSource {
             .args(["-n", HELPER_NICENESS, "ffmpeg", "-threads", "1"])
             .args(["-hide_banner", "-loglevel", "error", "-ss", &start, "-i"])
             .arg(path)
-            .args(["-vn", "-f", "f32le", "-ar", &SAMPLE_RATE.to_string()])
+            .arg("-vn")
+            .args(audio_filter())
+            .args(["-f", "f32le", "-ar", &SAMPLE_RATE.to_string()])
             .args(["-ac", &CHANNELS.to_string(), "pipe:1"])
             .stdin(Stdio::null())
             .stdout(Stdio::piped())
@@ -189,6 +213,7 @@ impl YtDlpSource {
             .args(["-n", HELPER_NICENESS, "ffmpeg", "-threads", "1"])
             .args(["-hide_banner", "-loglevel", "error", "-i", "pipe:0", "-vn"])
             .args(["-ss", &start])
+            .args(audio_filter())
             .args(["-f", "f32le", "-ar", &SAMPLE_RATE.to_string()])
             .args(["-ac", &CHANNELS.to_string(), "pipe:1"])
             .stdin(Stdio::piped())

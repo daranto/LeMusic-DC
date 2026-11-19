@@ -89,6 +89,11 @@
           <div id="queue"></div>
           <p class="drop-note">Tipp: Titel am Griff ⠿ ziehen zum Verschieben, Häkchen für Mehrfachauswahl, Rechtsklick oder ⋯ für weitere Aktionen.</p>
         </div>
+
+        <div class="card" id="history-card">
+          <h2>Zuletzt gespielt</h2>
+          <ol class="queue" id="history"></ol>
+        </div>
       </section>
 
       <!-- Playlists -->
@@ -124,6 +129,9 @@
             <label>Standard-Lautstärke (%)<input name="default_volume" type="number" min="0" max="200" required></label>
             <label>Kanal verlassen nach Inaktivität (Sekunden, 0 = nie)<input name="idle_timeout_secs" type="number" min="0" required></label>
             <label class="check"><input type="checkbox" name="pause_when_alone"> Pausieren, wenn niemand zuhört</label>
+            <label class="check"><input type="checkbox" name="fair_queue"> Wünsche fair mischen – reihum nach Wünschendem statt der Reihe nach</label>
+            <label class="check"><input type="checkbox" name="normalize_volume"> Lautstärke der Titel angleichen</label>
+            <p class="drop-note">Fair mischen: Wünscht jemand zehn Titel, kommen die Wünsche der anderen dazwischen. Gäste zählen einzeln. „Als Nächstes“ und Drag &amp; Drop bleiben unverändert. Angleichen gilt ab dem nächsten Titel.</p>
             <h3 class="subhead">Öffentliches Dashboard</h3>
             <label class="check"><input type="checkbox" name="public_enabled"> Aktiv – wer den Link kennt, kann Songs hinzufügen</label>
             <label>PIN (optional, 4 Ziffern)<input name="public_pin" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" placeholder="leer = ohne PIN" autocomplete="off"></label>

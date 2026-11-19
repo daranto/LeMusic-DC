@@ -248,15 +248,18 @@ pub fn configure(enabled: bool, max_mb: u64) {
     }
 }
 
-/// Übernimmt die Einstellungen und folgt späteren Änderungen.
+/// Übernimmt die Audio-Einstellungen (Cache, Lautstärke angleichen) und
+/// folgt späteren Änderungen.
 pub fn watch_settings(settings: SettingsStore) {
     let current = settings.current();
     configure(current.cache_enabled, current.cache_max_mb);
+    crate::source::set_normalize(current.normalize_volume);
     let mut rx = settings.subscribe();
     tokio::spawn(async move {
         while rx.changed().await.is_ok() {
             let s = rx.borrow_and_update().clone();
             configure(s.cache_enabled, s.cache_max_mb);
+            crate::source::set_normalize(s.normalize_volume);
             tokio::time::sleep(Duration::from_millis(100)).await;
         }
     });

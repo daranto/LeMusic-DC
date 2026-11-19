@@ -95,7 +95,9 @@ mod queue;
 mod state;
 mod voice;
 
-use queue::{apply_edit, enqueue_room, request_insert_index, take_entries};
+use queue::{
+    Wisher, apply_edit, enqueue_room, fair_insert_index, request_insert_index, take_entries,
+};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SavedState {
@@ -106,7 +108,13 @@ pub(crate) struct SavedState {
     pub repeat: RepeatMode,
     pub volume: u16,
     pub paused: bool,
+    /// Zuletzt gespielt (jüngster zuerst); fehlt in älteren Ständen.
+    #[serde(default)]
+    pub history: Vec<QueueEntry>,
 }
+
+/// So viele zuletzt gespielte Titel merkt sich der Player.
+const MAX_HISTORY: usize = 30;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub(crate) struct SavedCurrent {
@@ -155,6 +163,8 @@ pub(crate) struct Actor {
     last_save: Instant,
     /// Zuletzt entfernte Einträge (alte Position) für „Rückgängig“.
     trash: Vec<(usize, QueueEntry)>,
+    /// Zuletzt gestartete Titel, der jüngste (= laufende) zuerst.
+    history: VecDeque<QueueEntry>,
 }
 
 impl Actor {
@@ -180,7 +190,18 @@ impl Actor {
             dirty: false,
             last_save: Instant::now(),
             trash: Vec::new(),
+            history: VecDeque::new(),
         }
+    }
+
+    /// Merkt sich einen gestarteten Titel für „Zuletzt gespielt“.
+    fn remember_played(&mut self, entry: &QueueEntry) {
+        // „Wiederholen: aktueller Titel“ nicht mehrfach eintragen.
+        if self.history.front().is_some_and(|e| e.id == entry.id) {
+            return;
+        }
+        self.history.push_front(entry.clone());
+        self.history.truncate(MAX_HISTORY);
     }
 
     pub(crate) async fn run(mut self, mut rx: mpsc::Receiver<Msg>) {
