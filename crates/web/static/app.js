@@ -72,6 +72,7 @@ async function api(method, path, body, raw = false) {
     err.status = res.status;
     throw err;
   }
+  if (data?.queue_full) toast(`${data.queue_full} Titel passten nicht mehr in die Warteschlange`, "error");
   return data;
 }
 

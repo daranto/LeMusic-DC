@@ -71,6 +71,7 @@ pub(super) async fn enqueue_and_reply(
             text_channel: Some(ctx.channel_id().get()),
             play_next,
             before: None,
+            guest: false,
         })
         .await?;
 
@@ -93,6 +94,12 @@ pub(super) async fn enqueue_and_reply(
     if too_long > 0 {
         text.push_str(&format!(
             "\n_{too_long} Track(s) waren zu lang und wurden ausgelassen._"
+        ));
+    }
+    if outcome.dropped > 0 {
+        text.push_str(&format!(
+            "\n_{} Track(s) passten nicht mehr in die Warteschlange._",
+            outcome.dropped
         ));
     }
     ctx.send(CreateReply::default().embed(embeds::success(&text)))

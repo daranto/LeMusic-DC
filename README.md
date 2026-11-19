@@ -43,7 +43,7 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
 *Öffentliches Dashboard (optional mit 4-stelliger PIN)*
 - Gäste sehen, was läuft, und wünschen Songs per Drag & Drop oder Einfügen von YouTube-/SoundCloud-Links
 - Läuft auch hinter Cloudflare Tunnel/Reverse Proxy: alles liegt unter `/public`, die Admin-Seite bleibt intern
-- Schutz: nur YouTube/SoundCloud, Limits pro Minute, keine Steuerung für Gäste
+- Schutz: nur YouTube/SoundCloud, Limits pro Minute und für wartende Gast-Wünsche, PIN-Sperre pro Absender, keine Steuerung für Gäste
 
 **Schnellstart**
 
@@ -101,7 +101,7 @@ A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust
 *Public dashboard (optional 4-digit PIN)*
 - Guests see what's playing and request songs by dragging or pasting YouTube/SoundCloud links
 - Works behind Cloudflare Tunnel/reverse proxies: everything lives under `/public`, the admin UI stays internal
-- Protected: YouTube/SoundCloud only, rate limits, no playback control for guests
+- Protected: YouTube/SoundCloud only, rate limits and a cap on pending guest requests, per-sender PIN lockout, no playback control for guests
 
 **Quick start**
 

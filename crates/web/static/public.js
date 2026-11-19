@@ -157,10 +157,11 @@ async function addLinks(links) {
     let msg = r.added === 1
       ? (r.position === 0 ? "Spielt jetzt!" : `Eingereiht an Position ${r.position}`)
       : `${r.added} Titel eingereiht`;
-    if (r.truncated) msg += " (Playlist gekürzt)";
+    if (r.truncated) msg += " (gekürzt – Limit für Gäste)";
     toast(msg, "ok");
     for (const f of r.failed || []) toast(`Nicht geladen: ${f.error}`, "error");
     if (r.skipped_too_long) toast(`${r.skipped_too_long} Titel zu lang – ausgelassen`);
+    if (r.queue_full) toast(`${r.queue_full} Titel passten nicht mehr in die Warteschlange`);
     refresh();
   } catch (e) {
     if (!(e instanceof Locked)) toast(e.message, "error");

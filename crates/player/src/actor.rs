@@ -31,8 +31,8 @@ use crate::{
     build_track,
     manager::Shared,
     model::{
-        AutoJoinOutcome, EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEdit,
-        QueueEntry, RepeatMode, Snapshot,
+        AutoJoinOutcome, EnqueueOutcome, EnqueueRequest, MAX_GUEST_QUEUED, MAX_QUEUED_REQUESTS,
+        NowPlaying, PlayerEvent, QueueEdit, QueueEntry, RepeatMode, Snapshot,
     },
     resolve::permanent_reason,
 };
@@ -92,6 +92,19 @@ pub(crate) enum Msg {
 /// sonst ans Ende.
 fn request_insert_index(queue: &VecDeque<QueueEntry>) -> usize {
     queue.iter().position(|e| e.autoplay).unwrap_or(queue.len())
+}
+
+/// Wie viele Tracks noch eingereiht werden dürfen: Wünsche insgesamt und –
+/// bei Gästen – zusätzlich deren eigenes Kontingent. Autoplaylist-Einträge
+/// zählen nicht mit.
+fn enqueue_room(queue: &VecDeque<QueueEntry>, guest: bool) -> usize {
+    let requests = queue.iter().filter(|e| !e.autoplay).count();
+    let room = MAX_QUEUED_REQUESTS.saturating_sub(requests);
+    if !guest {
+        return room;
+    }
+    let guests = queue.iter().filter(|e| e.guest).count();
+    room.min(MAX_GUEST_QUEUED.saturating_sub(guests))
 }
 
 /// Höchstens so viele entfernte Einträge für „Rückgängig“ merken.
@@ -191,7 +204,10 @@ mod tests {
 
     use lemusic_core::TrackMeta;
 
-    use super::{QueueEdit, QueueEntry, apply_edit, request_insert_index};
+    use super::{
+        MAX_GUEST_QUEUED, MAX_QUEUED_REQUESTS, QueueEdit, QueueEntry, apply_edit, enqueue_room,
+        request_insert_index,
+    };
     use crate::resolve::permanent_reason;
 
     fn entry(id: u64, autoplay: bool) -> QueueEntry {
@@ -206,7 +222,33 @@ mod tests {
             }),
             requester: 0,
             autoplay,
+            guest: false,
         }
+    }
+
+    #[test]
+    fn enqueue_room_limits_requests_and_guests() {
+        // Autoplaylist zählt nicht mit.
+        let auto: VecDeque<_> = (0..3000).map(|i| entry(i, true)).collect();
+        assert_eq!(enqueue_room(&auto, false), MAX_QUEUED_REQUESTS);
+        assert_eq!(enqueue_room(&auto, true), MAX_GUEST_QUEUED);
+
+        // Wünsche: Gesamtgrenze.
+        let mut q: VecDeque<_> = (0..MAX_QUEUED_REQUESTS as u64 - 5)
+            .map(|i| entry(i, false))
+            .collect();
+        assert_eq!(enqueue_room(&q, false), 5);
+        assert_eq!(enqueue_room(&q, true), 5);
+
+        // Gäste: eigenes Kontingent.
+        q.clear();
+        q.extend((0..MAX_GUEST_QUEUED as u64 - 2).map(|i| {
+            let mut e = entry(i, false);
+            e.guest = true;
+            e
+        }));
+        assert_eq!(enqueue_room(&q, true), 2);
+        assert_eq!(enqueue_room(&q, false), MAX_QUEUED_REQUESTS - q.len());
     }
 
     #[test]
@@ -703,15 +745,38 @@ impl Actor {
         if req.tracks.is_empty() {
             bail!("Keine Tracks");
         }
+        let room = enqueue_room(&self.queue, req.guest);
+        if room == 0 {
+            if req.guest {
+                bail!(
+                    "Es warten schon {MAX_GUEST_QUEUED} Gast-Wünsche – bitte warten, bis ein paar gespielt wurden"
+                );
+            }
+            bail!("Die Warteschlange ist voll (höchstens {MAX_QUEUED_REQUESTS} Wünsche)");
+        }
+        let mut tracks = req.tracks;
+        let dropped = tracks.len().saturating_sub(room);
+        tracks.truncate(room);
+        if dropped > 0 {
+            info!(
+                guild_id = self.guild_id,
+                dropped,
+                guest = req.guest,
+                "Warteschlange voll, Tracks ausgelassen"
+            );
+        }
         self.ensure_joined(req.voice_channel).await?;
         if req.text_channel.is_some() {
             self.text_channel = req.text_channel;
         }
 
-        let entries: Vec<QueueEntry> = req
-            .tracks
+        let entries: Vec<QueueEntry> = tracks
             .into_iter()
-            .map(|meta| self.new_entry(meta, req.requester))
+            .map(|meta| {
+                let mut entry = self.new_entry(meta, req.requester);
+                entry.guest = req.guest;
+                entry
+            })
             .collect();
         let added = entries.len();
 
@@ -737,10 +802,15 @@ impl Actor {
             Ok(EnqueueOutcome {
                 added,
                 position: position.saturating_sub(1),
+                dropped,
             })
         } else {
             self.prepare_next().await;
-            Ok(EnqueueOutcome { added, position })
+            Ok(EnqueueOutcome {
+                added,
+                position,
+                dropped,
+            })
         }
     }
 
@@ -817,6 +887,7 @@ impl Actor {
             meta: Arc::new(meta),
             requester,
             autoplay: false,
+            guest: false,
         }
     }
 

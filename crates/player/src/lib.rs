@@ -17,8 +17,8 @@ use songbird::tracks::Track;
 
 pub use manager::{Player, PlayerManager};
 pub use model::{
-    AutoJoinOutcome, EnqueueOutcome, EnqueueRequest, NowPlaying, PlayerEvent, QueueEdit,
-    QueueEntry, RepeatMode, Snapshot, VoicePresence,
+    AutoJoinOutcome, EnqueueOutcome, EnqueueRequest, MAX_GUEST_QUEUED, MAX_QUEUED_REQUESTS,
+    NowPlaying, PlayerEvent, QueueEdit, QueueEntry, RepeatMode, Snapshot, VoicePresence,
 };
 pub use resolve::{
     Availability, MAX_PLAYLIST_TRACKS, SearchSource, check_available, is_supported_link, is_url,

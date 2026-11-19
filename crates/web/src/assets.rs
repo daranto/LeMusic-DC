@@ -15,7 +15,8 @@ const PUBLIC_JS: &str = include_str!("../static/public.js");
 
 /// Strenge CSP: nur eigene Skripte/Styles, Bilder auch von Thumbnail-CDNs.
 const CSP: &str = "default-src 'self'; img-src 'self' https: data:; style-src 'self'; \
-                   script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'";
+                   script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; \
+                   object-src 'none'; form-action 'self'";
 
 pub async fn index() -> impl IntoResponse {
     html_page(INDEX)

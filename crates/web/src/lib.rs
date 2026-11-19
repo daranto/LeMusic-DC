@@ -139,7 +139,38 @@ pub fn router(state: WebState) -> Router {
         .route("/public/public.js", get(assets::public_js))
         .nest("/public/api", public_api)
         .nest("/api", api)
+        .layer(axum::middleware::map_response(security_headers))
         .with_state(state)
+}
+
+/// Sicherheits-Header für jede Antwort (auch API, Skripte, Fehler). Was eine
+/// Route selbst setzt (z. B. die CSP der HTML-Seiten), bleibt unverändert.
+async fn security_headers(mut response: Response) -> Response {
+    use axum::http::{HeaderName, HeaderValue, header};
+    let headers = response.headers_mut();
+    let defaults = [
+        (header::X_CONTENT_TYPE_OPTIONS, "nosniff"),
+        (header::X_FRAME_OPTIONS, "DENY"),
+        (header::REFERRER_POLICY, "no-referrer"),
+        (
+            HeaderName::from_static("cross-origin-opener-policy"),
+            "same-origin",
+        ),
+        (
+            HeaderName::from_static("cross-origin-resource-policy"),
+            "same-origin",
+        ),
+        (
+            header::CONTENT_SECURITY_POLICY,
+            "default-src 'none'; frame-ancestors 'none'",
+        ),
+    ];
+    for (name, value) in defaults {
+        headers
+            .entry(name)
+            .or_insert(HeaderValue::from_static(value));
+    }
+    response
 }
 
 /// API-Antworten nie zwischenspeichern (Browser, Proxys).
@@ -155,11 +186,7 @@ async fn no_store(mut response: Response) -> Response {
 /// zum öffentlichen Dashboard, intern zur Admin-Oberfläche.
 async fn root(State(state): State<WebState>, headers: axum::http::HeaderMap) -> Response {
     let settings = state.settings.current();
-    let request_host = headers
-        .get("x-forwarded-host")
-        .or_else(|| headers.get(axum::http::header::HOST))
-        .and_then(|h| h.to_str().ok())
-        .map(host_only);
+    let request_host = request_host(&headers);
     let public_host = settings
         .public_url
         .split("://")
@@ -172,8 +199,17 @@ async fn root(State(state): State<WebState>, headers: axum::http::HeaderMap) -> 
     assets::index().await.into_response()
 }
 
+/// Host, an den die Anfrage ging (hinter einem Proxy aus `X-Forwarded-Host`).
+pub(crate) fn request_host(headers: &axum::http::HeaderMap) -> Option<String> {
+    headers
+        .get("x-forwarded-host")
+        .or_else(|| headers.get(axum::http::header::HOST))
+        .and_then(|h| h.to_str().ok())
+        .map(host_only)
+}
+
 /// `Example.org:8080/pfad` → `example.org`
-fn host_only(value: &str) -> String {
+pub(crate) fn host_only(value: &str) -> String {
     value
         .split(['/', '?', '#'])
         .next()
@@ -241,7 +277,41 @@ async fn health(State(state): State<WebState>) -> impl IntoResponse {
 
 #[cfg(test)]
 mod tests {
-    use super::host_only;
+    use axum::{
+        http::header,
+        response::{Html, IntoResponse},
+    };
+
+    use super::{host_only, security_headers};
+
+    #[tokio::test]
+    async fn adds_security_headers_without_overriding() {
+        let plain = security_headers(Html("x").into_response()).await;
+        let h = plain.headers();
+        assert_eq!(
+            h.get(header::X_CONTENT_TYPE_OPTIONS)
+                .and_then(|v| v.to_str().ok()),
+            Some("nosniff")
+        );
+        assert_eq!(
+            h.get(header::CONTENT_SECURITY_POLICY)
+                .and_then(|v| v.to_str().ok()),
+            Some("default-src 'none'; frame-ancestors 'none'")
+        );
+
+        let own = (
+            [(header::CONTENT_SECURITY_POLICY, "default-src 'self'")],
+            "x",
+        )
+            .into_response();
+        let own = security_headers(own).await;
+        assert_eq!(
+            own.headers()
+                .get(header::CONTENT_SECURITY_POLICY)
+                .and_then(|v| v.to_str().ok()),
+            Some("default-src 'self'")
+        );
+    }
 
     #[test]
     fn host_only_strips_port_path_and_case() {
