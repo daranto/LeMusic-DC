@@ -38,7 +38,8 @@ Stabiler Discord-Musikbot für **YouTube** und **SoundCloud**, geschrieben in Ru
   - Export/Import als JSON-Datei
   - Konfliktschutz: Gleichzeitige Änderungen (zweiter Tab, Discord) überschreiben sich nicht
 - **Autoplaylist:** läuft, wenn niemand etwas wünscht; Wünsche spielen immer vor den Autoplaylist-Titeln
-- Einstellungen, Logs, **tägliches automatisches yt-dlp-Update** zur einstellbaren Uhrzeit (plus Update per Klick), Selbsttest, YouTube-Cookies
+- Einstellungen, Logs, **tägliches automatisches yt-dlp-Update** zur einstellbaren Uhrzeit (plus Update per Klick) – jede neue Version wird geprüft, bei Problemen geht es automatisch zurück auf die vorherige –, Selbsttest, YouTube-Cookies
+- **Backup per Klick**, `/health` (Discord, Datenbank, Player, Voice, yt-dlp) und `/metrics` für Prometheus
 
 *Öffentliches Dashboard (optional mit 4-stelliger PIN)*
 - Gäste sehen, was läuft, und wünschen Songs per Drag & Drop oder Einfügen von YouTube-/SoundCloud-Links
@@ -96,7 +97,8 @@ A reliable Discord music bot for **YouTube** and **SoundCloud**, written in Rust
   - JSON export/import
   - conflict protection: simultaneous edits (second tab, Discord) never overwrite each other
 - **Autoplaylist:** plays when nobody requests anything; requests always play before autoplaylist tracks
-- Settings, live logs, **daily yt-dlp auto-update** at a configurable time (plus one-click update), self-test, YouTube cookies
+- Settings, live logs, **daily yt-dlp auto-update** at a configurable time (plus one-click update) – every new version is verified and automatically rolled back if it breaks –, self-test, YouTube cookies
+- **One-click backup**, `/health` (Discord, database, player, voice, yt-dlp) and `/metrics` for Prometheus
 
 *Public dashboard (optional 4-digit PIN)*
 - Guests see what's playing and request songs by dragging or pasting YouTube/SoundCloud links

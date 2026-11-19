@@ -4,6 +4,7 @@ mod actor;
 pub mod cache;
 pub mod diagnostics;
 mod manager;
+pub mod metrics;
 pub mod model;
 pub mod resolve;
 pub mod selftest;

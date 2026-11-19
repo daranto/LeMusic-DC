@@ -148,12 +148,37 @@ Schutz: nur YouTube-/SoundCloud-Links, höchstens 10 Links pro Wunsch und 30 pro
 | Neustart (aktualisiert yt-dlp, Musik läuft weiter) | `docker compose restart` |
 | Update auf neueste Version | `docker compose pull && docker compose up -d` |
 | Gesundheit | `curl localhost:8080/health` |
+| Metriken (Prometheus) | `curl localhost:8080/metrics` |
 | Selbsttest ohne Discord | `docker compose exec lemusic lemusic selftest never gonna give you up` |
-| Backup | Ordner `data/` sichern (enthält `lemusic.db`) |
+| Backup | Weboberfläche → **System → Backup herunterladen** (oder Ordner `data/` sichern) |
+
+### Gesundheit und Metriken
+
+`/health` antwortet mit `200`, wenn alles in Ordnung ist, sonst mit `503` und dem Grund. Der Docker-Healthcheck nutzt das:
+
+| Feld | geprüft wird |
+|---|---|
+| `discord` | Verbindung zum Discord-Gateway |
+| `database` | SQLite antwortet (2 s) |
+| `player` | Der Player-Actor antwortet (3 s) – sonst hängt er |
+| `voice` | Läuft gerade etwas: Der Bot ist im Sprachkanal und die Position bewegt sich (höchstens 60 s Stillstand) |
+| `ytdlp` | `yt-dlp --version` läuft (Ergebnis 5 min zwischengespeichert) |
+
+`/metrics` liefert Werte im Prometheus-Format, z. B. `lemusic_track_load_seconds` (Ladezeit pro Titel), `lemusic_tracks_failed_total`, `lemusic_track_retries_total`, `lemusic_stream_stalls_total`, `lemusic_audio_late_wakeups_total` (mögliche Aussetzer), Warteschlangengröße, Cache und Speicher. Wie `/health` liegt der Endpunkt nicht unter `/public` und ist über einen Tunnel, der nur `/public` durchlässt, nicht von außen erreichbar.
+
+### Backup und Wiederherstellen
+
+**System → Backup herunterladen** erzeugt eine vollständige Kopie der Datenbank (Einstellungen, Playlists, Warteschlange, Konto) als `lemusic-backup-<Datum>.db`, auch während der Wiedergabe. Wiederherstellen:
+
+1. `docker compose stop`
+2. Die Datei als `data/lemusic.db` ablegen und `data/lemusic.db-wal` sowie `data/lemusic.db-shm` löschen (falls vorhanden)
+3. `docker compose up -d`
+
+YouTube-Cookies und der Audio-Cache sind nicht im Backup; die `cookies.txt` liegt in `data/`.
 
 ### Wenn YouTube streikt
 
-1. Weboberfläche → **System** → *yt-dlp jetzt aktualisieren* (oder `docker compose restart`)
+1. Weboberfläche → **System** → *yt-dlp jetzt aktualisieren* (oder `docker compose restart`). Jede neue Version wird geprüft, indem der Bot den Audio-Link eines Referenz-Videos auflöst. Klappt das nicht, mit der vorherigen Version aber schon, geht es automatisch auf die vorherige zurück (steht unter *System* und im Log). Scheitern beide, liegt es eher am Netz oder an YouTube – dann bleibt die neue Version.
 2. **Selbsttest** ausführen
 3. Meldet YouTube „Sign in to confirm you're not a bot“: mit einem **Zweit-Account** eine `cookies.txt` exportieren (Browser-Erweiterung „Get cookies.txt LOCALLY“) und unter **System → YouTube-Cookies** hochladen. Das schaltet auch **altersbeschränkte Videos** frei (sonst werden sie mit Hinweis übersprungen).
 

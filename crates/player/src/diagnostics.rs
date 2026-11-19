@@ -47,8 +47,10 @@ fn run(scheduler: &'static songbird::driver::Scheduler) {
         thread::sleep(TICK);
         let late = before.elapsed().saturating_sub(TICK);
         worst_late = worst_late.max(late);
+        crate::metrics::AUDIO_TICKS.inc();
         if late > LATE_WARN {
             late_count += 1;
+            crate::metrics::AUDIO_LATE_WAKEUPS.inc();
         }
 
         if let Ok(stats) = scheduler.worker_thread_stats_blocking() {

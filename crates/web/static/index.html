@@ -169,7 +169,7 @@
           <div class="card">
             <h2>yt-dlp</h2>
             <p>Version: <strong id="ytdlp-version">…</strong></p>
-            <p class="muted">Wird bei jedem Containerstart und täglich zur eingestellten Uhrzeit aktualisiert (Einstellungen → Bot). Bei YouTube-Problemen hier sofort aktualisieren.</p>
+            <p class="muted">Wird bei jedem Containerstart und täglich zur eingestellten Uhrzeit aktualisiert (Einstellungen → Bot). Bei YouTube-Problemen hier sofort aktualisieren. Jede neue Version wird geprüft – funktioniert sie nicht, die alte aber schon, geht es automatisch auf die alte zurück.</p>
             <p class="drop-note" id="ytdlp-last"></p>
             <button class="btn primary" id="btn-ytdlp-update">Jetzt aktualisieren</button>
           </div>
@@ -183,6 +183,15 @@
               <button class="btn danger small" id="btn-cache-clear">Cache leeren</button>
             </div>
             <p class="drop-note">Ein- und ausschalten sowie die Größe unter Einstellungen → Bot.</p>
+          </div>
+
+          <div class="card">
+            <h2>Backup</h2>
+            <p class="muted">Vollständige Kopie der Datenbank: Einstellungen, Playlists, Warteschlange und Konto. Sicher auch während der Wiedergabe.</p>
+            <div class="row">
+              <a class="btn primary" id="btn-backup" href="/api/system/backup" download>Backup herunterladen</a>
+            </div>
+            <p class="drop-note">Wiederherstellen: Container stoppen, Datei als <code>data/lemusic.db</code> ablegen (vorher <code>lemusic.db-wal</code> und <code>lemusic.db-shm</code> löschen), Container starten.</p>
           </div>
 
           <form class="card" id="selftest-form">

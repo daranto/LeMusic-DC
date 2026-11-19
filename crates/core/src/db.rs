@@ -57,6 +57,18 @@ impl Db {
         Ok(Self { pool })
     }
 
+    /// Schreibt eine vollständige, in sich stimmige Kopie der Datenbank nach
+    /// `path` (`VACUUM INTO`, auch bei laufendem Betrieb sicher). Die Datei
+    /// darf noch nicht existieren.
+    pub async fn backup_to(&self, path: &Path) -> Result<()> {
+        sqlx::query("VACUUM INTO ?")
+            .bind(path.display().to_string())
+            .execute(&self.pool)
+            .await
+            .with_context(|| format!("Backup nach {} fehlgeschlagen", path.display()))?;
+        Ok(())
+    }
+
     /// Prüft, ob die Datenbank antwortet.
     pub async fn ping(&self) -> Result<()> {
         sqlx::query("SELECT 1").execute(&self.pool).await?;
@@ -117,5 +129,32 @@ impl Db {
     /// Schließt alle Verbindungen (beim Herunterfahren).
     pub async fn close(&self) {
         self.pool.close().await;
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn backup_is_a_complete_copy() -> Result<()> {
+        let dir = std::env::temp_dir().join(format!("lemusic-backup-test-{}", fastrand::u64(..)));
+        std::fs::create_dir_all(&dir)?;
+        let db = Db::open(&dir.join("lemusic.db")).await?;
+        db.set_json("probe", &"hallo").await?;
+        let copy = dir.join("kopie.db");
+        db.backup_to(&copy).await?;
+        // Zweites Backup an dieselbe Stelle schlägt fehl (nie überschreiben).
+        assert!(db.backup_to(&copy).await.is_err());
+
+        let restored = Db::open(&copy).await?;
+        assert_eq!(
+            restored.get_json::<String>("probe").await?.as_deref(),
+            Some("hallo")
+        );
+        restored.close().await;
+        db.close().await;
+        let _ = std::fs::remove_dir_all(&dir);
+        Ok(())
     }
 }
