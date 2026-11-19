@@ -5,7 +5,15 @@ Alle nennenswerten Änderungen an LeMusic. Versionen folgen
 Docker-Image `ghcr.io/daranto/lemusic-dc:<version>` (z. B. `0.2.0` oder
 `0.2` für die neueste 0.2.x), `latest` folgt dem Stand von `main`.
 
-## [0.2.0] – unveröffentlicht
+## [0.2.0] – 2026-11-19
+
+### Neu
+- **Fair mischen:** Wünsche werden reihum nach Wünschendem eingereiht (Gäste
+  einzeln, anonym); abschaltbar.
+- **Lautstärke angleichen** mit ffmpeg `loudnorm` (-16 LUFS); abschaltbar.
+- **Zuletzt gespielt** in der Weboberfläche und im öffentlichen Dashboard,
+  mit „Nochmal“-Knopf; übersteht Neustarts.
+- Gast-Wünsche sind in der Weboberfläche und in Discord als „Gast“ markiert.
 
 ### Sicherheit
 - Öffentliches Dashboard: höchstens 100 wartende Gast-Wünsche, 100 Titel pro

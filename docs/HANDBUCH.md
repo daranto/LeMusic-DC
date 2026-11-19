@@ -68,6 +68,12 @@ Weboberfläche: **http://localhost:8080** (Login mit `ADMIN_USER`/`ADMIN_PASSWOR
 
 **Wünsche vor Autoplaylist:** Läuft die Autoplaylist, kommt jeder Wunsch (Discord, öffentliches Dashboard, Weboberfläche) hinter die anderen Wünsche, aber vor die restlichen Autoplaylist-Titel – läuft nur die Autoplaylist, spielt der Wunsch also als Nächstes.
 
+**Fair mischen** (Einstellungen → Bot, Standard: an): Wünsche werden reihum nach Wünschendem eingereiht. Wünscht jemand zehn Titel, kommen die Wünsche der anderen dazwischen: `A A A` + Wunsch von B → `A B A A`. Wer gerade den laufenden Titel gewünscht hat, ist erst in der nächsten Runde wieder dran. Discord-Nutzer zählen nach Konto, Gäste des öffentlichen Dashboards einzeln (anonym, nach ihrer Adresse), die Weboberfläche zählt als ein Wünschender. „Als Nächstes“ (`/play next`, DJ) und Drag & Drop in der Weboberfläche setzen Titel weiterhin genau dorthin.
+
+**Lautstärke angleichen** (Einstellungen → Bot, Standard: an): ffmpeg gleicht jeden Titel auf -16 LUFS an (EBU R128, Spitzen höchstens -1,5 dB), damit leise und laute Titel – gerade in Autoplaylists aus verschiedenen Quellen – gleich laut klingen. Das kostet beim Vorladen etwas Rechenzeit (gemessen: 23× Echtzeit auf einem Kern statt 330×, erster Ton nach 0,3 s statt 0,03 s); auf sehr schwacher Hardware ggf. ausschalten. Gilt ab dem nächsten Titel.
+
+**Zuletzt gespielt:** Die letzten 30 gespielten Titel stehen unter der Warteschlange (Weboberfläche) bzw. die letzten 15 im öffentlichen Dashboard – mit **↻ Nochmal**, um einen Titel erneut zu wünschen. Der Verlauf übersteht Neustarts.
+
 **Automatisch beitreten** (Einstellungen → Server): Betritt jemand einen Sprachkanal, kommt der Bot dazu – wie `/join`, also mit Autoplaylist, falls eingestellt. Unter „Erlaubte Sprachkanäle“ lässt sich das auf bestimmte Kanäle beschränken (keiner ausgewählt = alle; „Nur in Sprachkanal“ hat Vorrang). Regeln:
 - Ist der Bot schon in einem Kanal mit Zuhörern, bleibt er dort.
 - Sitzt er allein in einem anderen Kanal (z. B. pausiert, weil alle gegangen sind), zieht er um und spielt den aktuellen Titel an derselben Stelle weiter.

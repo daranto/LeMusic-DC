@@ -120,7 +120,26 @@ function render({ player: p, voice_channels }) {
           <span class="dur">${fmt(e.track.duration)}</span>
         </li>`).join("") + (p.queue.length > 30 ? `<li class="empty">… und ${p.queue.length - 30} weitere</li>` : "")
     : `<li class="empty">Die Warteschlange ist leer.</li>`;
+
+  const history = p.history ?? [];
+  $("#history").innerHTML = history.length
+    ? history.slice(0, 15).map((e, i) => `
+        <li>
+          ${e.track.thumbnail ? `<img loading="lazy" alt="" src="${esc(e.track.thumbnail)}">` : ""}
+          <div class="meta">
+            <a href="${esc(e.track.url)}" target="_blank" rel="noopener">${esc(e.track.title)}</a>
+            <small>${esc(e.track.author)}</small>
+          </div>
+          <button class="btn small" data-again="${i}" title="Nochmal wünschen">↻ Nochmal</button>
+        </li>`).join("")
+    : `<li class="empty">Noch nichts gespielt.</li>`;
 }
+
+$("#history").addEventListener("click", (ev) => {
+  const btn = ev.target.closest("button[data-again]");
+  const entry = btn && state.player?.history?.[Number(btn.dataset.again)];
+  if (entry) addLinks([entry.track.url]);
+});
 
 function tick() {
   const now = state.player?.now;

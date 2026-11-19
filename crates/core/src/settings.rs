@@ -40,6 +40,10 @@ pub struct BotSettings {
     pub cache_enabled: bool,
     /// Höchstgröße des Caches in MB.
     pub cache_max_mb: u64,
+    /// Wünsche reihum nach Wünschendem mischen (statt der Reihe nach).
+    pub fair_queue: bool,
+    /// Lautstärke der Titel angleichen (ffmpeg `loudnorm`, EBU R128).
+    pub normalize_volume: bool,
 }
 
 impl Default for BotSettings {
@@ -56,6 +60,8 @@ impl Default for BotSettings {
             ytdlp_update_time: "04:00".into(),
             cache_enabled: false,
             cache_max_mb: 2048,
+            fair_queue: true,
+            normalize_volume: true,
         }
     }
 }

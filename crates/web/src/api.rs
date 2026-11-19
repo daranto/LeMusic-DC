@@ -194,7 +194,7 @@ pub(crate) async fn enqueue(
     voice_channel: u64,
     next: bool,
     before: Option<u64>,
-    guest: bool,
+    guest: Option<u64>,
 ) -> ApiResult {
     let settings = GuildSettings::load(&state.db, state.guild_id).await?;
     let (tracks, too_long): (Vec<_>, Vec<_>) = tracks.into_iter().partition(|t| {
@@ -238,7 +238,7 @@ pub(crate) async fn play(
         SearchSource::YouTube
     };
     let tracks = resolve(&form.query, source).await?;
-    enqueue(&state, tracks, channel, form.next, None, false).await
+    enqueue(&state, tracks, channel, form.next, None, None).await
 }
 
 #[derive(Deserialize)]
@@ -308,7 +308,7 @@ pub(crate) async fn enqueue_tracks(
         channel,
         form.next || form.now,
         form.before,
-        false,
+        None,
     )
     .await?;
     if form.now && result.0.get("position").and_then(Value::as_u64) == Some(1) {
@@ -526,7 +526,7 @@ pub(crate) async fn play_playlist(
         fastrand::shuffle(&mut tracks);
     }
     let channel = voice_channel_for(&state, form.voice_channel.as_deref()).await?;
-    enqueue(&state, tracks, channel, false, None, false).await
+    enqueue(&state, tracks, channel, false, None, None).await
 }
 
 #[derive(Deserialize)]

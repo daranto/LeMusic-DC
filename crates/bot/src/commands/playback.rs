@@ -71,7 +71,7 @@ pub(super) async fn enqueue_and_reply(
             text_channel: Some(ctx.channel_id().get()),
             play_next,
             before: None,
-            guest: false,
+            guest: None,
         })
         .await?;
 

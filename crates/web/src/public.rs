@@ -445,7 +445,7 @@ pub(crate) async fn player(
     if let Some(now) = &mut dto.now {
         now.entry.requester = None;
     }
-    for entry in &mut dto.queue {
+    for entry in dto.queue.iter_mut().chain(dto.history.iter_mut()) {
         entry.requester = None;
     }
     let settings = GuildSettings::load(&state.db, state.guild_id).await?;
@@ -472,10 +472,21 @@ pub(crate) struct AddForm {
     voice_channel: Option<String>,
 }
 
+/// Anonyme Kennung eines Gasts für das faire Mischen: aus seiner Adresse
+/// (IPv6 pro /64) abgeleitet, nie 0. Die Adresse selbst wird nicht
+/// gespeichert.
+fn guest_id(sender: IpAddr) -> u64 {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    sender.hash(&mut hasher);
+    hasher.finish().max(1)
+}
+
 /// Fügt YouTube-/SoundCloud-Links hinzu (auch Playlists, gekürzt).
 pub(crate) async fn add(
     State(state): State<WebState>,
     _guest: Guest,
+    Sender(sender): Sender,
     Json(form): Json<AddForm>,
 ) -> Result<Json<Value>, ApiError> {
     let mut links: Vec<String> = form
@@ -546,7 +557,8 @@ pub(crate) async fn add(
     tracks.truncate(granted);
 
     let count = tracks.len();
-    let Json(result) = enqueue(&state, tracks, channel, false, None, true).await?;
+    let Json(result) =
+        enqueue(&state, tracks, channel, false, None, Some(guest_id(sender))).await?;
     info!(
         links = links.len(),
         tracks = count,
@@ -647,6 +659,14 @@ mod tests {
         guard.record_success(sender);
         guard.record_failure(sender, "1234");
         assert_eq!(guard.locked(sender, "1234"), None);
+    }
+
+    #[test]
+    fn guest_ids_are_stable_and_distinct() {
+        let a = guest_id(ip("203.0.113.7"));
+        assert_eq!(a, guest_id(ip("203.0.113.7")));
+        assert_ne!(a, guest_id(ip("203.0.113.8")));
+        assert_ne!(a, 0);
     }
 
     #[test]
