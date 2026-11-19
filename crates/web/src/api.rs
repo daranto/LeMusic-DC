@@ -890,7 +890,7 @@ pub(crate) async fn backup(
     let _ = tokio::fs::remove_file(&path).await;
     let bytes = result?;
     let stamp = jiff::Timestamp::now()
-        .to_zoned(ytdlp::time_zone())
+        .to_zoned_datetime(ytdlp::time_zone())
         .strftime("%Y-%m-%d_%H%M")
         .to_string();
     info!(bytes = bytes.len(), "Backup heruntergeladen");

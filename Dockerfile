@@ -22,7 +22,7 @@ RUN cargo build --release --bin lemusic
 FROM mwader/static-ffmpeg:9.0.2-1 AS ffmpeg
 
 # --- Laufzeit-Image ---
-FROM python:3.13-slim-bookworm AS runtime
+FROM python:3.15-slim-bookworm AS runtime
 # Commit-Stand (setzt die CI), sichtbar in Weboberfläche, Log und /health.
 ARG LEMUSIC_REVISION=dev
 ENV LEMUSIC_REVISION=${LEMUSIC_REVISION}
