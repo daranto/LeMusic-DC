@@ -192,6 +192,16 @@ impl Db {
 mod tests {
     use super::*;
 
+    /// Gespeicherte Sitzungen sind SHA-256-Hashes – ändert sich die Ausgabe
+    /// (z. B. durch ein sha2-Update), wären alle Admins abgemeldet.
+    #[test]
+    fn token_hash_is_plain_sha256_hex() {
+        assert_eq!(
+            token_hash("abc"),
+            "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+        );
+    }
+
     #[tokio::test]
     async fn login_flow() -> Result<()> {
         let db = Db::in_memory().await?;

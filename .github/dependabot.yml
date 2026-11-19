@@ -12,6 +12,10 @@ updates:
       # Kleine Updates gesammelt in einem PR statt Dutzender einzelner.
       cargo-minor:
         update-types: [minor, patch]
+    ignore:
+      # Muss zu songbird passen (siehe Cargo.toml) – ein eigenes Update würde
+      # das PCM-Dekodieren abschalten und die Wiedergabe zur Laufzeit brechen.
+      - dependency-name: symphonia
 
   - package-ecosystem: github-actions
     directory: /

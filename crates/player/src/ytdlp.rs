@@ -11,7 +11,7 @@
 use std::time::Duration;
 
 use anyhow::{Context as _, Result, bail};
-use jiff::{Timestamp, Zoned, civil::Date, tz::TimeZone};
+use jiff::{Timestamp, ZonedDateTime, civil::Date, tz::TimeZone};
 use lemusic_core::{Db, SettingsStore};
 use serde::{Deserialize, Serialize};
 use tokio::{process::Command, sync::Mutex};
@@ -69,8 +69,8 @@ pub fn time_zone_name() -> String {
         .unwrap_or_else(|| "UTC".into())
 }
 
-fn now() -> Zoned {
-    Timestamp::now().to_zoned(time_zone())
+fn now() -> ZonedDateTime {
+    Timestamp::now().to_zoned_datetime(time_zone())
 }
 
 /// Installierte yt-dlp-Version.
@@ -350,7 +350,7 @@ pub fn parse_time(s: &str) -> Option<(i8, i8)> {
 }
 
 /// Ist es Zeit für den täglichen Lauf (und lief er heute noch nicht)?
-fn due(now: &Zoned, at: (i8, i8), last_run: Option<Date>) -> bool {
+fn due(now: &ZonedDateTime, at: (i8, i8), last_run: Option<Date>) -> bool {
     let (h, m) = at;
     let reached = (now.hour(), now.minute()) >= (h, m);
     reached && last_run != Some(now.date())
@@ -419,8 +419,9 @@ mod tests {
     #[test]
     fn runs_once_per_day_after_the_time() -> Result<()> {
         let tz = TimeZone::get("Europe/Berlin")?;
-        let at = |s: &str| -> Result<Zoned> {
-            Ok(s.parse::<jiff::civil::DateTime>()?.to_zoned(tz.clone())?)
+        let at = |s: &str| -> Result<ZonedDateTime> {
+            Ok(s.parse::<jiff::civil::DateTime>()?
+                .to_zoned_datetime(tz.clone())?)
         };
         let before = at("2026-11-17T03:59")?;
         let on_time = at("2026-11-17T04:00")?;
