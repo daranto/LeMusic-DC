@@ -5,21 +5,20 @@ mod assets;
 mod auth;
 mod check;
 mod dto;
+mod health;
 mod public;
 
 use std::{future::Future, net::SocketAddr, sync::Arc, time::Instant};
 
 use anyhow::{Context as _, Result};
 use axum::{
-    Json, Router,
+    Router,
     extract::State,
-    http::StatusCode,
     response::{IntoResponse, Redirect, Response},
     routing::{get, post, put},
 };
 use lemusic_core::{Db, GuildDirectory, Health, LogBuffer, SettingsStore};
 use lemusic_player::PlayerManager;
-use serde::Serialize;
 use tracing::info;
 
 #[derive(Clone)]
@@ -35,6 +34,7 @@ pub struct WebState {
     pub(crate) limiter: Arc<auth::LoginLimiter>,
     pub(crate) public: Arc<public::PublicState>,
     pub(crate) checks: Arc<check::Checks>,
+    pub(crate) voice_watch: Arc<health::VoiceWatch>,
 }
 
 impl WebState {
@@ -59,6 +59,7 @@ impl WebState {
             limiter: Arc::default(),
             public: Arc::default(),
             checks: Arc::default(),
+            voice_watch: Arc::default(),
         }
     }
 }
@@ -109,6 +110,7 @@ pub fn router(state: WebState) -> Router {
         .route("/logs", get(api::logs))
         .route("/system/ytdlp-update", post(api::ytdlp_update))
         .route("/system/cache", axum::routing::delete(api::clear_cache))
+        .route("/system/backup", get(api::backup))
         .route("/system/selftest", post(api::selftest))
         .route(
             "/system/cookies",
@@ -126,7 +128,10 @@ pub fn router(state: WebState) -> Router {
         .layer(axum::middleware::map_response(no_store));
 
     Router::new()
-        .route("/health", get(health))
+        .route("/health", get(health::health))
+        // Nicht unter /public – über einen Tunnel, der nur /public
+        // durchlässt, also nicht von außen erreichbar.
+        .route("/metrics", get(health::metrics))
         .route("/", get(root))
         .route("/app.js", get(assets::app_js))
         .route("/style.css", get(assets::style_css))
@@ -238,41 +243,6 @@ pub async fn serve(
     .with_graceful_shutdown(shutdown)
     .await?;
     Ok(())
-}
-
-#[derive(Serialize)]
-pub(crate) struct HealthReport {
-    status: &'static str,
-    discord: bool,
-    database: bool,
-    version: String,
-}
-
-pub(crate) async fn health_report(state: &WebState) -> (bool, HealthReport) {
-    let database = tokio::time::timeout(std::time::Duration::from_secs(2), state.db.ping())
-        .await
-        .is_ok_and(|r| r.is_ok());
-    let discord = state.health.discord_connected();
-    let ok = database && discord;
-    (
-        ok,
-        HealthReport {
-            status: if ok { "ok" } else { "degraded" },
-            discord,
-            database,
-            version: lemusic_core::config::version_string(),
-        },
-    )
-}
-
-async fn health(State(state): State<WebState>) -> impl IntoResponse {
-    let (ok, report) = health_report(&state).await;
-    let code = if ok {
-        StatusCode::OK
-    } else {
-        StatusCode::SERVICE_UNAVAILABLE
-    };
-    (code, Json(report))
 }
 
 #[cfg(test)]

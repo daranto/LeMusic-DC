@@ -201,6 +201,8 @@ async function refreshOverview() {
     $("#status-row").innerHTML =
       chip(`Discord${o.guild ? ` · ${o.guild.name}` : ""}`, o.health.discord) +
       chip("Datenbank", o.health.database) +
+      chip("Player", o.health.player) +
+      chip("Voice", o.health.voice) +
       chip(`yt-dlp ${o.ytdlp_version}`, o.ytdlp_version !== "nicht verfügbar") +
       `<span class="chip">⏱ Laufzeit ${esc(uptime)}</span>` +
       `<span class="chip">v${esc(o.health.version)}</span>`;

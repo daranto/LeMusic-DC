@@ -30,6 +30,7 @@ use uuid::Uuid;
 use crate::{
     build_track,
     manager::Shared,
+    metrics,
     model::{
         AutoJoinOutcome, EnqueueOutcome, EnqueueRequest, MAX_GUEST_QUEUED, MAX_QUEUED_REQUESTS,
         NowPlaying, PlayerEvent, QueueEdit, QueueEntry, RepeatMode, Snapshot,
@@ -399,6 +400,8 @@ struct Playing {
     last_progress: Instant,
     retries: u8,
     ready: bool,
+    /// Startzeitpunkt, bis zur Abspielbereitschaft (für die Ladezeit-Metrik).
+    loading_since: Option<Instant>,
 }
 
 pub(crate) struct Actor {
@@ -949,7 +952,11 @@ impl Actor {
             last_progress: Instant::now(),
             retries,
             ready: false,
+            loading_since: Some(Instant::now()),
         });
+        if retries == 0 && start_at.is_zero() {
+            metrics::TRACKS_STARTED.inc();
+        }
         self.idle_since = None;
         self.dirty = true;
         if announce {
@@ -1031,6 +1038,7 @@ impl Actor {
                 Ok(()) => return,
                 Err(e) => {
                     warn!(error = %e, title = %next.meta.title, "Track konnte nicht gestartet werden");
+                    metrics::TRACKS_FAILED.inc();
                     self.emit(PlayerEvent::TrackFailed {
                         guild_id: self.guild_id,
                         text_channel: self.text_channel,
@@ -1243,7 +1251,10 @@ impl Actor {
         };
 
         match failure {
-            None => self.advance(true).await,
+            None => {
+                metrics::TRACKS_FINISHED.inc();
+                self.advance(true).await
+            }
             Some(error) => self.handle_failure(error).await,
         }
     }
@@ -1264,6 +1275,7 @@ impl Actor {
                 "Track-Fehler – versuche erneut"
             );
             let resume_at = current.position;
+            metrics::TRACK_RETRIES.inc();
             if self
                 .start(current.entry.clone(), resume_at, current.retries + 1, false)
                 .await
@@ -1273,6 +1285,7 @@ impl Actor {
             }
         }
         warn!(title = %current.entry.meta.title, %error, "Track übersprungen");
+        metrics::TRACKS_FAILED.inc();
         self.emit(PlayerEvent::TrackFailed {
             guild_id: self.guild_id,
             text_channel: self.text_channel,
@@ -1300,6 +1313,11 @@ impl Actor {
             return;
         };
         current.ready = matches!(info.ready, ReadyState::Playable);
+        if current.ready
+            && let Some(since) = current.loading_since.take()
+        {
+            metrics::TRACK_LOAD.observe(since.elapsed());
+        }
         let position = current.start_at + info.position;
         if position != current.position {
             current.position = position;
@@ -1327,6 +1345,7 @@ impl Actor {
                     "Position bewegt sich seit 20 s nicht"
                 );
             }
+            metrics::STREAM_STALLS.inc();
             self.handle_failure("Stream hängt".into()).await;
         }
     }

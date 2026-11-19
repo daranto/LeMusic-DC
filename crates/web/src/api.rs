@@ -29,7 +29,7 @@ use crate::{
     WebState,
     auth::Admin,
     dto::{GuildSettingsDto, PlayerDto, TrackDto, TrackInput},
-    health_report,
+    health::health_report,
 };
 
 // ---------------------------------------------------------------------------
@@ -114,8 +114,11 @@ pub(crate) fn parse_channel(id: Option<&str>) -> Result<Option<u64>, ApiError> {
 // ---------------------------------------------------------------------------
 
 static YTDLP_VERSION: Mutex<Option<(Instant, String)>> = Mutex::new(None);
+/// Anzeige, wenn yt-dlp nicht ausführbar ist.
+pub(crate) const YTDLP_MISSING: &str = "nicht verfügbar";
 
-async fn ytdlp_version(force: bool) -> String {
+/// Installierte yt-dlp-Version, 5 min zwischengespeichert.
+pub(crate) async fn ytdlp_version(force: bool) -> String {
     if !force
         && let Ok(cache) = YTDLP_VERSION.lock()
         && let Some((at, v)) = cache.as_ref()
@@ -125,7 +128,7 @@ async fn ytdlp_version(force: bool) -> String {
     }
     let version = ytdlp::version()
         .await
-        .unwrap_or_else(|| "nicht verfügbar".into());
+        .unwrap_or_else(|| YTDLP_MISSING.into());
     if let Ok(mut cache) = YTDLP_VERSION.lock() {
         *cache = Some((Instant::now(), version.clone()));
     }
@@ -863,6 +866,48 @@ pub(crate) async fn logs(
     Query(q): Query<LogsQuery>,
 ) -> ApiResult {
     Ok(Json(json!(state.logs.since(q.after, 500))))
+}
+
+/// Lädt eine vollständige Kopie der Datenbank herunter (Einstellungen,
+/// Playlists, Warteschlange, Konto). Wiederherstellen: Container stoppen,
+/// Datei als `data/lemusic.db` ablegen, starten – siehe Handbuch.
+pub(crate) async fn backup(
+    State(state): State<WebState>,
+    _admin: Admin,
+) -> Result<Response, ApiError> {
+    let dir = lemusic_core::config::data_dir();
+    let path = dir.join(format!(
+        "backup-{}.db.tmp",
+        lemusic_core::auth::random_token(8)
+    ));
+    let result = async {
+        state.db.backup_to(&path).await?;
+        tokio::fs::read(&path)
+            .await
+            .map_err(|e| anyhow::anyhow!("Backup nicht lesbar: {e}"))
+    }
+    .await;
+    let _ = tokio::fs::remove_file(&path).await;
+    let bytes = result?;
+    let stamp = jiff::Timestamp::now()
+        .to_zoned(ytdlp::time_zone())
+        .strftime("%Y-%m-%d_%H%M")
+        .to_string();
+    info!(bytes = bytes.len(), "Backup heruntergeladen");
+    Ok((
+        [
+            (
+                axum::http::header::CONTENT_TYPE,
+                "application/vnd.sqlite3".to_string(),
+            ),
+            (
+                axum::http::header::CONTENT_DISPOSITION,
+                format!("attachment; filename=\"lemusic-backup-{stamp}.db\""),
+            ),
+        ],
+        bytes,
+    )
+        .into_response())
 }
 
 pub(crate) async fn clear_cache(_admin: Admin) -> ApiResult {

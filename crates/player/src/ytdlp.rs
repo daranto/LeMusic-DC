@@ -1,6 +1,12 @@
 //! yt-dlp aktuell halten: Update auf Knopfdruck und einmal täglich zur
 //! eingestellten Uhrzeit. YouTube ändert sich ständig – eine veraltete
 //! yt-dlp-Version ist die häufigste Ursache für „lädt nicht mehr“.
+//!
+//! Jede neue Version wird geprüft (Audio-Link eines Referenz-Videos
+//! auflösen). Schlägt das fehl, die alte Version aber funktioniert, geht es
+//! automatisch auf die alte zurück. Das gilt auch für das Update, das der
+//! Entrypoint beim Containerstart macht: Beim Start wird die Version mit der
+//! zuletzt geprüften verglichen.
 
 use std::time::Duration;
 
@@ -11,12 +17,22 @@ use serde::{Deserialize, Serialize};
 use tokio::{process::Command, sync::Mutex};
 use tracing::{info, warn};
 
+use crate::metrics;
+
 /// Zeitzone für den Zeitplan, falls `TZ` nicht gesetzt ist.
 const DEFAULT_TZ: &str = "Europe/Berlin";
 /// Datenbank-Schlüssel für das Ergebnis des letzten Laufs.
 const STATUS_KEY: &str = "ytdlp:last_update";
+/// Datenbank-Schlüssel der zuletzt erfolgreich geprüften Version.
+const GOOD_KEY: &str = "ytdlp:good_version";
 /// Höchstdauer für pip.
 const PIP_TIMEOUT: Duration = Duration::from_secs(180);
+/// Referenz für die Prüfung: „Me at the zoo“, das erste YouTube-Video
+/// (seit 2005 online, kurz, ohne Altersgrenze).
+const CHECK_URL: &str = "https://www.youtube.com/watch?v=jNQXAC9IVRw";
+const CHECK_TIMEOUT: Duration = Duration::from_secs(90);
+/// Paket samt Extras, wie im Dockerfile.
+const PACKAGE: &str = "yt-dlp[default,deno]";
 
 /// Nie zwei Updates gleichzeitig (Knopf + Zeitplan).
 static RUNNING: Mutex<()> = Mutex::const_new(());
@@ -75,7 +91,23 @@ pub async fn version() -> Option<String> {
         .then(|| String::from_utf8_lossy(&output.stdout).trim().to_string())
 }
 
+/// `pip install --upgrade yt-dlp[…]`
 async fn pip_upgrade() -> Result<()> {
+    pip_install(&["--upgrade", PACKAGE]).await
+}
+
+/// Genau diese Version installieren (für den Rückfall).
+async fn pip_pin(version: &str) -> Result<()> {
+    if !version
+        .chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '.')
+    {
+        bail!("Ungültige Versionsangabe: {version}");
+    }
+    pip_install(&[&format!("{PACKAGE}=={version}")]).await
+}
+
+async fn pip_install(args: &[&str]) -> Result<()> {
     let output = tokio::time::timeout(
         PIP_TIMEOUT,
         Command::new("pip")
@@ -84,9 +116,8 @@ async fn pip_upgrade() -> Result<()> {
                 "--no-cache-dir",
                 "--quiet",
                 "--disable-pip-version-check",
-                "--upgrade",
-                "yt-dlp[default,deno]",
             ])
+            .args(args)
             .kill_on_drop(true)
             .output(),
     )
@@ -107,31 +138,161 @@ async fn pip_upgrade() -> Result<()> {
     Ok(())
 }
 
-/// Prüft auf eine neue Version und installiert sie. Speichert das Ergebnis.
+/// Funktioniert yt-dlp? Löst den Audio-Link des Referenz-Videos auf – genau
+/// der Teil, der bei YouTube-Änderungen als Erstes bricht.
+pub async fn check_extraction() -> Result<()> {
+    let output = tokio::time::timeout(
+        CHECK_TIMEOUT,
+        Command::new("yt-dlp")
+            .args(crate::ytdlp_base_args())
+            .args([
+                "--quiet",
+                "--no-warnings",
+                "--no-playlist",
+                "-f",
+                "bestaudio/best",
+                "--get-url",
+                "--",
+                CHECK_URL,
+            ])
+            .kill_on_drop(true)
+            .output(),
+    )
+    .await
+    .context("Prüfung dauerte zu lange")?
+    .context("yt-dlp nicht ausführbar")?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    if output.status.success() && stdout.trim_start().starts_with("http") {
+        return Ok(());
+    }
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    bail!(
+        "{}",
+        stderr
+            .lines()
+            .rev()
+            .find(|l| !l.trim().is_empty())
+            .unwrap_or("keine Audio-Adresse erhalten")
+    )
+}
+
+/// Was nach einer Prüfung zu tun ist (reine Entscheidung, testbar).
+#[derive(Debug, PartialEq, Eq)]
+enum Verdict {
+    /// Neue Version funktioniert.
+    Keep,
+    /// Neue kaputt, alte funktioniert → alte behalten.
+    RolledBack,
+    /// Beide scheitern → liegt nicht an der Version (Netz, YouTube); die
+    /// neue bleibt, weil sie eher einen Fix enthält.
+    BothFail,
+    /// Neue kaputt, keine alte bekannt.
+    NoFallback,
+}
+
+fn verdict(new_ok: bool, old: Option<bool>) -> Verdict {
+    match (new_ok, old) {
+        (true, _) => Verdict::Keep,
+        (false, Some(true)) => Verdict::RolledBack,
+        (false, Some(false)) => Verdict::BothFail,
+        (false, None) => Verdict::NoFallback,
+    }
+}
+
+/// Prüft die installierte Version `new` und fällt bei Bedarf auf `old`
+/// zurück. Liefert (ok, Meldung).
+async fn verify_or_rollback(db: &Db, old: Option<&str>, new: &str) -> (bool, String) {
+    let new_err = match check_extraction().await {
+        Ok(()) => {
+            remember_good(db, new).await;
+            return (true, format!("Version {new} geprüft"));
+        }
+        Err(e) => format!("{e:#}"),
+    };
+    warn!(version = new, error = %new_err, "Neue yt-dlp-Version besteht die Prüfung nicht");
+    let old_ok = match old.filter(|o| *o != new) {
+        None => None,
+        Some(old) => match pip_pin(old).await {
+            Ok(()) => Some(check_extraction().await.is_ok()),
+            Err(e) => {
+                warn!(error = %e, "Alte yt-dlp-Version nicht installierbar");
+                None
+            }
+        },
+    };
+    match (verdict(false, old_ok), old) {
+        (Verdict::RolledBack, Some(old)) => {
+            metrics::YTDLP_ROLLBACKS.inc();
+            remember_good(db, old).await;
+            (
+                false,
+                format!("Version {new} funktioniert nicht ({new_err}) – zurück auf {old}"),
+            )
+        }
+        (Verdict::BothFail, _) => {
+            if let Err(e) = pip_pin(new).await {
+                warn!(error = %e, "Neue yt-dlp-Version nicht wieder installierbar");
+            }
+            (
+                false,
+                format!(
+                    "Prüfung scheitert auch mit der alten Version ({new_err}) – vermutlich \
+                     Netzwerk oder YouTube; {new} bleibt installiert"
+                ),
+            )
+        }
+        _ => (
+            false,
+            format!("Version {new} besteht die Prüfung nicht: {new_err}"),
+        ),
+    }
+}
+
+async fn remember_good(db: &Db, version: &str) {
+    if let Err(e) = db.set_json(GOOD_KEY, &version).await {
+        warn!(error = %e, "Geprüfte yt-dlp-Version nicht gespeichert");
+    }
+}
+
+async fn save_status(db: &Db, status: &UpdateStatus) {
+    if let Err(e) = db.set_json(STATUS_KEY, status).await {
+        warn!(error = %e, "yt-dlp-Status nicht gespeichert");
+    }
+}
+
+fn log_result(trigger: &str, ok: bool, message: &str) {
+    if ok {
+        info!(trigger, "yt-dlp: {message}");
+    } else {
+        warn!(trigger, error = %message, "yt-dlp-Update nicht erfolgreich");
+    }
+}
+
+/// Prüft auf eine neue Version, installiert und prüft sie (mit Rückfall auf
+/// die alte, wenn die neue nicht funktioniert). Speichert das Ergebnis.
 pub async fn update(db: &Db, trigger: &str) -> UpdateStatus {
     let _guard = RUNNING.lock().await;
+    metrics::YTDLP_UPDATES.inc();
     let before = version().await;
     let result = pip_upgrade().await;
-    let after = version().await;
-    let (ok, message) = match result {
-        Err(e) => (false, format!("{e:#}")),
-        Ok(()) if before.is_some() && before == after => {
+    let installed = version().await;
+    let (ok, message) = match (result, installed.as_deref()) {
+        (Err(e), _) => (false, format!("{e:#}")),
+        (Ok(()), _) if before.is_some() && before == installed => {
             (true, "Bereits die neueste Version".to_string())
         }
-        Ok(()) => (
-            true,
-            format!(
-                "Aktualisiert: {} → {}",
-                before.as_deref().unwrap_or("?"),
-                after.as_deref().unwrap_or("?")
-            ),
-        ),
+        (Ok(()), None) => (false, "yt-dlp nach dem Update nicht ausführbar".to_string()),
+        (Ok(()), Some(new)) => {
+            let (ok, checked) = verify_or_rollback(db, before.as_deref(), new).await;
+            let head = format!("Aktualisiert: {} → {new}", before.as_deref().unwrap_or("?"));
+            (ok, format!("{head} · {checked}"))
+        }
     };
-    if ok {
-        info!(trigger, before = ?before, after = ?after, "yt-dlp: {message}");
-    } else {
-        warn!(trigger, error = %message, "yt-dlp-Update fehlgeschlagen");
+    if !ok {
+        metrics::YTDLP_UPDATE_FAILURES.inc();
     }
+    let after = version().await;
+    log_result(trigger, ok, &message);
     let status = UpdateStatus {
         at: now().strftime("%d.%m.%Y %H:%M").to_string(),
         trigger: trigger.into(),
@@ -140,10 +301,36 @@ pub async fn update(db: &Db, trigger: &str) -> UpdateStatus {
         after,
         message,
     };
-    if let Err(e) = db.set_json(STATUS_KEY, &status).await {
-        warn!(error = %e, "yt-dlp-Status nicht gespeichert");
-    }
+    save_status(db, &status).await;
     status
+}
+
+/// Nach dem Start: Hat der Entrypoint eine neue Version installiert, wird sie
+/// geprüft (und ggf. auf die zuletzt geprüfte zurückgesetzt).
+pub async fn verify_after_start(db: &Db) {
+    let _guard = RUNNING.lock().await;
+    let Some(current) = version().await else {
+        warn!("yt-dlp nicht ausführbar");
+        return;
+    };
+    let good: Option<String> = db.get_json(GOOD_KEY).await.ok().flatten();
+    if good.as_deref() == Some(current.as_str()) {
+        return;
+    }
+    let (ok, message) = verify_or_rollback(db, good.as_deref(), &current).await;
+    if !ok {
+        metrics::YTDLP_UPDATE_FAILURES.inc();
+    }
+    log_result("Start", ok, &message);
+    let status = UpdateStatus {
+        at: now().strftime("%d.%m.%Y %H:%M").to_string(),
+        trigger: "Start".into(),
+        ok,
+        before: good,
+        after: version().await,
+        message,
+    };
+    save_status(db, &status).await;
 }
 
 /// Ergebnis des letzten Laufs.
@@ -185,6 +372,7 @@ pub fn spawn_daily(db: Db, settings: SettingsStore) {
             time_zone = %time_zone_name(),
             "Tägliches yt-dlp-Update eingeplant"
         );
+        verify_after_start(&db).await;
         let mut tick = tokio::time::interval(Duration::from_secs(30));
         loop {
             tick.tick().await;
@@ -207,6 +395,15 @@ pub fn spawn_daily(db: Db, settings: SettingsStore) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rollback_decisions() {
+        assert_eq!(verdict(true, None), Verdict::Keep);
+        assert_eq!(verdict(true, Some(false)), Verdict::Keep);
+        assert_eq!(verdict(false, Some(true)), Verdict::RolledBack);
+        assert_eq!(verdict(false, Some(false)), Verdict::BothFail);
+        assert_eq!(verdict(false, None), Verdict::NoFallback);
+    }
 
     #[test]
     fn times_are_parsed() {
