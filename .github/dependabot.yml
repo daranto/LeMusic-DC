@@ -1,0 +1,29 @@
+# Automatische Update-PRs für Abhängigkeiten. Die CI (fmt, clippy, Tests,
+# cargo-deny) prüft jeden PR, bevor er gemergt wird.
+version: 2
+updates:
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    groups:
+      # Kleine Updates gesammelt in einem PR statt Dutzender einzelner.
+      cargo-minor:
+        update-types: [minor, patch]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
+
+  # Basis-Images im Dockerfile (rust, python, static-ffmpeg).
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday

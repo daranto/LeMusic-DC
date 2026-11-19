@@ -147,6 +147,7 @@ Schutz: nur YouTube-/SoundCloud-Links, höchstens 10 Links pro Wunsch und 30 pro
 | Logs | `docker compose logs -f` |
 | Neustart (aktualisiert yt-dlp, Musik läuft weiter) | `docker compose restart` |
 | Update auf neueste Version | `docker compose pull && docker compose up -d` |
+| Feste Version nutzen | in `docker-compose.yml` `image: ghcr.io/daranto/lemusic-dc:0.2` (neueste 0.2.x) statt `:latest` – Änderungen siehe [CHANGELOG](../CHANGELOG.md) |
 | Gesundheit | `curl localhost:8080/health` |
 | Metriken (Prometheus) | `curl localhost:8080/metrics` |
 | Selbsttest ohne Discord | `docker compose exec lemusic lemusic selftest never gonna give you up` |

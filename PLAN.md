@@ -141,6 +141,6 @@ Ein Track wird erst unmittelbar vor dem Abspielen gestartet (lazy, mit 5 s Vorla
 ## Lokale Entwicklung
 
 - Rust über `rustup` (Minimal-Profil), `cmake` über Homebrew (für libopus), Docker über OrbStack
-- Prüfen: `cargo clippy`
+- Prüfen: `cargo clippy --all-targets`, `cargo test --all` (inkl. HTTP-Integrationstests in `crates/web/tests`), `cargo deny check` (Sicherheitsmeldungen, Lizenzen; Ausnahmen begründet in `deny.toml`)
 - Selbsttest: `docker compose exec lemusic lemusic selftest [--soundcloud] [--start 1:30] <URL oder Suche>`
 - Bot starten: `.env` ausfüllen, dann `docker compose up -d` (fertiges Image) bzw. lokal bauen mit `docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d --build`
