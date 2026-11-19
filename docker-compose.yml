@@ -4,6 +4,8 @@
 #   docker compose pull && docker compose up -d
 services:
   lemusic:
+    # `latest` = neuester Stand. Für eine feste Version z. B. `:0.2` (neueste
+    # 0.2.x) oder `:0.2.0` eintragen – Änderungen stehen in CHANGELOG.md.
     image: ghcr.io/daranto/lemusic-dc:latest
     container_name: lemusic
     restart: unless-stopped

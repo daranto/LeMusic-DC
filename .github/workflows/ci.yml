@@ -5,11 +5,15 @@ on:
     branches: [main]
     tags: ["v*"]
   pull_request:
+  # Wöchentlich nach neuen Sicherheitsmeldungen zu den Abhängigkeiten schauen.
+  schedule:
+    - cron: "17 5 * * 1"
 
 # Ein neuer Push bricht den älteren Lauf ab – so kann nie ein später fertiger,
 # älterer Build :latest überschreiben.
 concurrency:
-  group: ci-${{ github.ref }}
+  # Wöchentlicher Lauf getrennt, damit er nie einen Image-Build abbricht.
+  group: ci-${{ github.event_name == 'schedule' && 'schedule' || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -25,6 +29,24 @@ jobs:
       - run: cargo fmt --all --check
       - run: cargo clippy --all-targets -- -D warnings
       - run: cargo test --all
+      # Die Weboberfläche hat keinen Build-Schritt – Syntaxfehler würden erst
+      # im Browser auffallen.
+      - name: JavaScript-Syntax prüfen
+        run: |
+          for f in crates/web/static/*.js; do node --check "$f"; done
+          cat crates/web/static/app/*.js > "$RUNNER_TEMP/app.js"
+          node --check "$RUNNER_TEMP/app.js"
+
+  # Bekannte Sicherheitslücken (RustSec), Lizenzen, Herkunft – siehe deny.toml.
+  # Blockiert keine Image-Builds: Eine neue Meldung zu einer transitiven
+  # Abhängigkeit soll kein Release aufhalten, aber sichtbar rot werden.
+  deny:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check
 
   # Jede Architektur baut nativ auf ihrem eigenen Runner (arm64 per QEMU zu
   # emulieren dauerte ~28 min statt ~2 min).
@@ -71,6 +93,10 @@ jobs:
           build-args: |
             LEMUSIC_REVISION=${{ github.sha }}
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+          # Herkunftsnachweis (SLSA-Provenance) und Stückliste (SBOM) werden
+          # als Attestierungen ans Image gehängt.
+          provenance: mode=max
+          sbom: true
           cache-from: type=gha,scope=${{ env.PLATFORM_PAIR }}
           cache-to: type=gha,mode=max,scope=${{ env.PLATFORM_PAIR }}
       - name: Digest merken
@@ -113,6 +139,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
             type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}
             type=sha
       - name: Multi-Arch-Image erstellen
         working-directory: ${{ runner.temp }}/digests

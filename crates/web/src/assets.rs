@@ -6,7 +6,16 @@ use axum::{
 };
 
 const INDEX: &str = include_str!("../static/index.html");
-const APP_JS: &str = include_str!("../static/app.js");
+/// Die Admin-Oberfläche liegt in mehreren Dateien unter `static/app/` und
+/// wird als ein Skript ausgeliefert – Reihenfolge und gemeinsamer
+/// Gültigkeitsbereich bleiben damit genau wie in einer Datei.
+const APP_JS: &str = concat!(
+    include_str!("../static/app/00-core.js"),
+    include_str!("../static/app/10-player.js"),
+    include_str!("../static/app/20-playlists.js"),
+    include_str!("../static/app/30-settings.js"),
+    include_str!("../static/app/40-system.js"),
+);
 const STYLE_CSS: &str = include_str!("../static/style.css");
 const DND_JS: &str = include_str!("../static/dnd.js");
 const TRACKLIST_JS: &str = include_str!("../static/tracklist.js");
